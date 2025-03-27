@@ -33,6 +33,11 @@ export interface AiReviewerConfig {
     ignorePaths?: string[]
     includePatterns?: string[]
     excludePatterns?: string[]
+    prompts?: {
+      system?: string
+      review?: string
+      summary?: string
+    }
   }
 }
 
@@ -68,6 +73,16 @@ const defaultConfig: AiReviewerConfig = {
       'build/',
       '.git/',
     ],
+    prompts: {
+      system: `你是一个专业的代码审查助手，擅长识别代码中的问题并提供改进建议。
+请按照以下格式提供反馈:
+1. 分析代码差异
+2. 列出具体问题
+3. 对每个问题提供改进建议
+4. 提供总结`,
+      review: undefined,
+      summary: undefined,
+    },
   },
 }
 
@@ -212,6 +227,10 @@ function mergeConfig(
 
       if (config.review.excludePatterns) {
         merged.review.excludePatterns = config.review.excludePatterns
+      }
+
+      if (config.review.prompts) {
+        merged.review.prompts = config.review.prompts
       }
     }
   }

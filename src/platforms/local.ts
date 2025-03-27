@@ -139,8 +139,29 @@ export class LocalPlatform implements Platform {
         return ''
       }
 
+      // 首先尝试从根目录读取文件
+      const rootPath = process.cwd()
       const fullPath = resolve(this.path, filePath)
-      return await readFile(fullPath, 'utf-8')
+
+      try {
+        return await readFile(fullPath, 'utf-8')
+      }
+      catch (error) {
+        // 如果在指定目录下找不到文件，尝试从项目根目录读取
+        if (this.path !== rootPath) {
+          try {
+            const rootFilePath = resolve(rootPath, filePath)
+            return await readFile(rootFilePath, 'utf-8')
+          }
+          catch (innerError) {
+            // 如果仍然找不到，抛出原始错误
+            throw error
+          }
+        }
+        else {
+          throw error
+        }
+      }
     }
     catch (error) {
       consola.warn(`获取文件内容时出错: ${filePath}`, error)

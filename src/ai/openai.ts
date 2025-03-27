@@ -32,6 +32,13 @@ export class OpenAIProvider implements AiProvider {
 
       consola.debug(`使用OpenAI审查文件: ${diff.newPath}`)
 
+      const systemPrompt = this.config.review?.prompts?.system || `你是一个专业的代码审查助手，擅长识别代码中的问题并提供改进建议。
+请按照以下格式提供反馈:
+1. 分析代码差异
+2. 列出具体问题
+3. 对每个问题提供改进建议
+4. 提供总结`
+
       const response = await this.client.chat.completions.create({
         model: this.config.model,
         temperature: this.config.temperature || 0.1,
@@ -39,12 +46,7 @@ export class OpenAIProvider implements AiProvider {
         messages: [
           {
             role: 'system',
-            content: `你是一个专业的代码审查助手，擅长识别代码中的问题并提供改进建议。
-请按照以下格式提供反馈:
-1. 分析代码差异
-2. 列出具体问题
-3. 对每个问题提供改进建议
-4. 提供总结`,
+            content: systemPrompt,
           },
           {
             role: 'user',
@@ -110,6 +112,16 @@ export class OpenAIProvider implements AiProvider {
    * 构建代码审查提示
    */
   private buildReviewPrompt(diff: CodeDiff, language: string): string {
+    const customPrompt = this.config.review?.prompts?.review
+
+    if (customPrompt) {
+      // 替换自定义提示中的占位符
+      return customPrompt
+        .replace('{{language}}', language)
+        .replace('{{filePath}}', diff.newPath)
+        .replace('{{diffContent}}', diff.diffContent)
+    }
+
     return `请审查以下${language}代码差异，并提供改进建议:
 
 文件路径: ${diff.newPath}
@@ -142,6 +154,16 @@ ${diff.diffContent}
 问题数: ${result.issues.length}
 问题摘要: ${result.issues.map(issue => `- [${issue.severity}] ${issue.message}`).join('\n')}`
     }).join('\n\n')
+
+    const customPrompt = this.config.review?.prompts?.summary
+
+    if (customPrompt) {
+      // 替换自定义提示中的占位符
+      return customPrompt
+        .replace('{{filesCount}}', String(filesCount))
+        .replace('{{issuesCount}}', String(issuesCount))
+        .replace('{{resultsSummary}}', resultsSummary)
+    }
 
     return `请总结以下代码审查结果，并提供整体改进建议:
 

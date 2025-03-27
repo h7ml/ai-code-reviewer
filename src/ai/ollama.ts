@@ -33,15 +33,60 @@ export class OllamaProvider implements AiProvider {
       const language = diff.language || this.detectLanguage(diff.newPath)
       const prompt = this.buildReviewPrompt(diff, language)
 
-      consola.debug(`使用Ollama审查文件: ${diff.newPath}`)
+      consola.debug(`使用Ollama审查文件: ${diff.newPath}, 模型: ${this.config.model}`)
 
-      const response = await this.generateCompletion(prompt)
+      const systemPrompt = this.config.review?.prompts?.system || `你是一个专业的代码审查助手，擅长识别代码中的问题并提供改进建议。
+请按照以下格式提供反馈:
+1. 分析代码差异
+2. 列出具体问题
+3. 对每个问题提供改进建议
+4. 提供总结`
 
-      if (!response) {
-        throw new Error('Ollama响应内容为空')
+      // Ollama API的新版本使用/api/chat，但不同模型对消息格式的支持不同
+      // 首先尝试使用旧的generate API，这对所有模型都有效
+      try {
+        // 创建包含系统提示和用户提示的完整提示
+        const fullPrompt = `${systemPrompt}\n\n${prompt}`
+        const content = await this.generateCompletion(fullPrompt)
+        return this.parseReviewResponse(content, diff.newPath)
       }
+      catch (error) {
+        consola.warn(`使用generate API失败，尝试使用chat API: ${error}`)
 
-      return this.parseReviewResponse(response, diff.newPath)
+        // 如果generate失败，尝试使用chat API
+        const response = await fetch(`${this.baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: this.config.model,
+            messages: [
+              {
+                role: 'system',
+                content: systemPrompt,
+              },
+              {
+                role: 'user',
+                content: prompt,
+              },
+            ],
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Ollama API请求失败: ${response.status} ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        const content = data.message?.content
+
+        if (!content) {
+          throw new Error('Ollama响应内容为空')
+        }
+
+        return this.parseReviewResponse(content, diff.newPath)
+      }
     }
     catch (error) {
       consola.error(`Ollama审查代码时出错:`, error)
@@ -55,10 +100,46 @@ export class OllamaProvider implements AiProvider {
   async generateSummary(results: ReviewResult[]): Promise<string> {
     try {
       const prompt = this.buildSummaryPrompt(results)
+      const systemPrompt = this.config.review?.prompts?.system || `你是一个专业的代码审查助手，擅长总结代码审查结果并提供改进建议。`
 
       consola.debug('使用Ollama生成审查总结')
 
-      return await this.generateCompletion(prompt)
+      // 首先尝试旧的generate API
+      try {
+        const fullPrompt = `${systemPrompt}\n\n${prompt}`
+        return await this.generateCompletion(fullPrompt)
+      }
+      catch (error) {
+        consola.warn(`使用generate API生成总结失败，尝试使用chat API: ${error}`)
+
+        // 如果失败，尝试使用chat API
+        const response = await fetch(`${this.baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: this.config.model,
+            messages: [
+              {
+                role: 'system',
+                content: systemPrompt,
+              },
+              {
+                role: 'user',
+                content: prompt,
+              },
+            ],
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Ollama API请求失败: ${response.status} ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        return data.message?.content || ''
+      }
     }
     catch (error) {
       consola.error(`Ollama生成总结时出错:`, error)
@@ -96,6 +177,16 @@ export class OllamaProvider implements AiProvider {
    * 构建代码审查提示
    */
   private buildReviewPrompt(diff: CodeDiff, language: string): string {
+    const customPrompt = this.config.review?.prompts?.review
+
+    if (customPrompt) {
+      // 替换自定义提示中的占位符
+      return customPrompt
+        .replace('{{language}}', language)
+        .replace('{{filePath}}', diff.newPath)
+        .replace('{{diffContent}}', diff.diffContent)
+    }
+
     return `请审查以下${language}代码差异，并提供改进建议:
 
 文件路径: ${diff.newPath}
@@ -113,7 +204,7 @@ ${diff.diffContent}
 5. 可读性和维护性改进
 6. 最佳实践建议
 
-请提供具体的问题位置、严重程度和改进建议。`
+请提供具体的问题位置、严重程度和改进建议。返回JSON格式的审查结果。`
   }
 
   /**
@@ -128,6 +219,16 @@ ${diff.diffContent}
 问题数: ${result.issues.length}
 问题摘要: ${result.issues.map(issue => `- [${issue.severity}] ${issue.message}`).join('\n')}`
     }).join('\n\n')
+
+    const customPrompt = this.config.review?.prompts?.summary
+
+    if (customPrompt) {
+      // 替换自定义提示中的占位符
+      return customPrompt
+        .replace('{{filesCount}}', String(filesCount))
+        .replace('{{issuesCount}}', String(issuesCount))
+        .replace('{{resultsSummary}}', resultsSummary)
+    }
 
     return `请总结以下代码审查结果，并提供整体改进建议:
 

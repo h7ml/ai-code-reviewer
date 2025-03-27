@@ -47,6 +47,28 @@ notifications:
   wecom:
     enabled: false
     webhook: YOUR_WEBHOOK_URL
+    
+# 审查配置（可选）
+review:
+  # 忽略文件
+  ignoreFiles:
+    - "*.lock"
+    - "*.min.js"
+  # 忽略路径
+  ignorePaths:
+    - "node_modules/"
+    - "dist/"
+  # 自定义提示
+  prompts:
+    # 系统提示
+    system: |
+      你是一个专业的代码审查助手，擅长识别代码中的问题并提供改进建议。
+    # 审查提示（支持占位符：{{language}}、{{filePath}}、{{diffContent}}）
+    review: |
+      请审查以下{{language}}代码...
+    # 总结提示（支持占位符：{{filesCount}}、{{issuesCount}}、{{resultsSummary}}）
+    summary: |
+      请总结以下代码审查结果...
 ```
 
 或使用环境变量：

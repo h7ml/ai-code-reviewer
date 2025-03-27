@@ -1,8 +1,8 @@
+import { consola } from 'consola'
+import fetch from 'cross-fetch'
 import type { ReviewResult } from '../core/reviewer'
 import type { Platform } from '../platforms/types'
 import type { NotificationConfig, NotificationManager } from './types'
-import { consola } from 'consola'
-import fetch from 'cross-fetch'
 
 /**
  * 默认通知管理器实现

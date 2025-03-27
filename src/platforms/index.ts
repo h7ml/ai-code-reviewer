@@ -1,5 +1,5 @@
-import type { Platform, PlatformConfig, PlatformOptions } from './types'
 import { consola } from 'consola'
+import type { Platform, PlatformConfig, PlatformOptions } from './types'
 import { GitHubPlatform } from './github'
 import { GitLabPlatform } from './gitlab'
 import { LocalPlatform } from './local'

@@ -1,12 +1,12 @@
-import type { CodeDiff } from '../core/reviewer'
-import type { Platform, PlatformOptions } from './types'
 import { exec } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import * as process from 'node:process'
 import { promisify } from 'node:util'
 import { consola } from 'consola'
+import type { CodeDiff } from '../core/reviewer'
 import { isNode } from '../utils/env'
+import type { Platform, PlatformOptions } from './types'
 
 const execAsync = promisify(exec)
 

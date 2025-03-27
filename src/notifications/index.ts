@@ -1,5 +1,5 @@
-import type { NotificationConfig, NotificationManager } from './types'
 import { consola } from 'consola'
+import type { NotificationConfig, NotificationManager } from './types'
 import { DefaultNotificationManager } from './default'
 
 /**

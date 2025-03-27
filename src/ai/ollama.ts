@@ -1,7 +1,7 @@
-import type { CodeDiff, ReviewResult } from '../core/reviewer'
-import type { AiProvider, AiProviderConfig } from './types'
 import { consola } from 'consola'
 import fetch from 'cross-fetch'
+import type { CodeDiff, ReviewResult } from '../core/reviewer'
+import type { AiProvider, AiProviderConfig } from './types'
 
 /**
  * Ollama API接口

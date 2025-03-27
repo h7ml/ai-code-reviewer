@@ -1,5 +1,5 @@
-import type { AiProvider, AiProviderConfig } from './types'
 import { consola } from 'consola'
+import type { AiProvider, AiProviderConfig } from './types'
 import { OllamaProvider } from './ollama'
 import { OpenAIProvider } from './openai'
 

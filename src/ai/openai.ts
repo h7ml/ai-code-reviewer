@@ -1,7 +1,7 @@
-import type { CodeDiff, ReviewResult } from '../core/reviewer'
-import type { AiProvider, AiProviderConfig } from './types'
 import { consola } from 'consola'
 import { OpenAI } from 'openai'
+import type { CodeDiff, ReviewResult } from '../core/reviewer'
+import type { AiProvider, AiProviderConfig } from './types'
 
 /**
  * OpenAI提供者实现

@@ -1,7 +1,7 @@
-import type { CodeDiff } from '../core/reviewer'
-import type { Platform, PlatformConfig, PlatformOptions } from './types'
 import { consola } from 'consola'
 import fetch from 'cross-fetch'
+import type { CodeDiff } from '../core/reviewer'
+import type { Platform, PlatformConfig, PlatformOptions } from './types'
 
 /**
  * GitHub平台实现

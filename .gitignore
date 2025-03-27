@@ -32,3 +32,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# 配置
+.aireviewrc.yml

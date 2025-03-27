@@ -17,13 +17,13 @@
 
 ```bash
 # 全局安装
-npm install -g ai-code-reviewer
+npm install -g @dext7r/ai-code-reviewer
 
 # 或使用pnpm
-pnpm add -g ai-code-reviewer
+pnpm add -g @dext7r/ai-code-reviewer
 
 # 或使用yarn
-yarn global add ai-code-reviewer
+yarn global add @dext7r/ai-code-reviewer
 ```
 
 ## 配置
@@ -76,9 +76,9 @@ ai-review local --path ./src
 [MIT](./LICENSE) License
 
 <!-- Badges -->
-[npm-version-src]: https://img.shields.io/npm/v/ai-code-reviewer?style=flat&colorA=080f12&colorB=1fa669
-[npm-version-href]: https://npmjs.com/package/ai-code-reviewer
-[npm-downloads-src]: https://img.shields.io/npm/dm/ai-code-reviewer?style=flat&colorA=080f12&colorB=1fa669
-[npm-downloads-href]: https://npmjs.com/package/ai-code-reviewer
-[license-src]: https://img.shields.io/github/license/ai-code-reviewer/ai-code-reviewer.svg?style=flat&colorA=080f12&colorB=1fa669
-[license-href]: https://github.com/ai-code-reviewer/ai-code-reviewer/blob/main/LICENSE
+[npm-version-src]: https://img.shields.io/npm/v/@dext7r/ai-code-reviewer?style=flat&colorA=080f12&colorB=1fa669
+[npm-version-href]: https://npmjs.com/package/@dext7r/ai-code-reviewer
+[npm-downloads-src]: https://img.shields.io/npm/dm/@dext7r/ai-code-reviewer?style=flat&colorA=080f12&colorB=1fa669
+[npm-downloads-href]: https://npmjs.com/package/@dext7r/ai-code-reviewer
+[license-src]: https://img.shields.io/github/license/h7ml/ai-code-reviewer.svg?style=flat&colorA=080f12&colorB=1fa669
+[license-href]: https://github.com/h7ml/ai-code-reviewer/blob/main/LICENSE

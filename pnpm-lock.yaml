@@ -4,79 +4,163 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  cli:
+    bumpp:
+      specifier: ^10.1.0
+      version: 10.1.0
+    lint-staged:
+      specifier: ^15.5.0
+      version: 15.5.0
+    tsx:
+      specifier: ^4.19.3
+      version: 4.19.3
+    typescript:
+      specifier: ^5.8.2
+      version: 5.8.2
+    unbuild:
+      specifier: ^3.5.0
+      version: 3.5.0
+  conflicts_cli_h24_3_0:
+    '@antfu/ni':
+      specifier: ^24.3.0
+      version: 24.3.0
+  conflicts_cli_h2_12_1:
+    simple-git-hooks:
+      specifier: ^2.12.1
+      version: 2.12.1
+  conflicts_cli_h4_11_0:
+    '@antfu/eslint-config':
+      specifier: ^4.11.0
+      version: 4.11.0
+  conflicts_cli_h6_2_3:
+    vite:
+      specifier: ^6.2.3
+      version: 6.2.3
+  conflicts_cli_h9_23_0:
+    eslint:
+      specifier: ^9.23.0
+      version: 9.23.0
+  conflicts_testing_h2_3_4:
+    yaml:
+      specifier: ^2.3.4
+      version: 2.7.0
+  conflicts_testing_h3_0_9:
+    vitest:
+      specifier: ^3.0.9
+      version: 3.0.9
+  conflicts_types_h22_13_14:
+    '@types/node':
+      specifier: ^22.13.14
+      version: 22.13.14
+  conflicts_utils_h1_0_0:
+    tinyexec:
+      specifier: ^1.0.0
+      version: 1.0.0
+  default:
+    cac:
+      specifier: ^6.7.14
+      version: 6.7.14
+    chalk:
+      specifier: ^5.3.0
+      version: 5.4.1
+    consola:
+      specifier: ^3.2.3
+      version: 3.4.2
+    cross-fetch:
+      specifier: ^3.1.5
+      version: 3.2.0
+    dotenv:
+      specifier: ^16.3.1
+      version: 16.4.7
+    fast-glob:
+      specifier: ^3.3.3
+      version: 3.3.3
+    openai:
+      specifier: ^4.19.0
+      version: 4.89.1
+  inlined:
+    '@antfu/utils':
+      specifier: ^9.1.0
+      version: 9.1.0
+  testing:
+    vitest-package-exports:
+      specifier: ^0.1.1
+      version: 0.1.1
+
 importers:
 
   .:
     dependencies:
       cac:
-        specifier: ^6.7.14
+        specifier: 'catalog:'
         version: 6.7.14
       chalk:
-        specifier: ^5.3.0
+        specifier: 'catalog:'
         version: 5.4.1
       consola:
-        specifier: ^3.2.3
+        specifier: 'catalog:'
         version: 3.4.2
       cross-fetch:
-        specifier: ^3.1.5
+        specifier: 'catalog:'
         version: 3.2.0
       dotenv:
-        specifier: ^16.3.1
+        specifier: 'catalog:'
         version: 16.4.7
       openai:
-        specifier: ^4.19.0
+        specifier: 'catalog:'
         version: 4.89.1
       yaml:
-        specifier: ^2.3.4
+        specifier: catalog:conflicts_testing_h2_3_4
         version: 2.7.0
     devDependencies:
       '@antfu/eslint-config':
-        specifier: ^4.11.0
+        specifier: catalog:conflicts_cli_h4_11_0
         version: 4.11.0(@typescript-eslint/utils@8.28.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2))(@vue/compiler-sfc@3.5.13)(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2)(vitest@3.0.9(@types/debug@4.1.12)(@types/node@22.13.14)(jiti@2.4.2)(tsx@4.19.3)(yaml@2.7.0))
       '@antfu/ni':
-        specifier: ^24.3.0
+        specifier: catalog:conflicts_cli_h24_3_0
         version: 24.3.0
       '@antfu/utils':
-        specifier: ^9.1.0
+        specifier: catalog:inlined
         version: 9.1.0
       '@types/node':
-        specifier: ^22.13.14
+        specifier: catalog:conflicts_types_h22_13_14
         version: 22.13.14
       bumpp:
-        specifier: ^10.1.0
+        specifier: catalog:cli
         version: 10.1.0
       eslint:
-        specifier: ^9.23.0
+        specifier: catalog:conflicts_cli_h9_23_0
         version: 9.23.0(jiti@2.4.2)
       fast-glob:
-        specifier: ^3.3.3
+        specifier: 'catalog:'
         version: 3.3.3
       lint-staged:
-        specifier: ^15.5.0
+        specifier: catalog:cli
         version: 15.5.0
       simple-git-hooks:
-        specifier: ^2.12.1
+        specifier: catalog:conflicts_cli_h2_12_1
         version: 2.12.1
       tinyexec:
-        specifier: ^1.0.0
+        specifier: catalog:conflicts_utils_h1_0_0
         version: 1.0.0
       tsx:
-        specifier: ^4.19.3
+        specifier: catalog:cli
         version: 4.19.3
       typescript:
-        specifier: ^5.8.2
+        specifier: catalog:cli
         version: 5.8.2
       unbuild:
-        specifier: ^3.5.0
+        specifier: catalog:cli
         version: 3.5.0(typescript@5.8.2)
       vite:
-        specifier: ^6.2.3
+        specifier: catalog:conflicts_cli_h6_2_3
         version: 6.2.3(@types/node@22.13.14)(jiti@2.4.2)(tsx@4.19.3)(yaml@2.7.0)
       vitest:
-        specifier: ^3.0.9
+        specifier: catalog:conflicts_testing_h3_0_9
         version: 3.0.9(@types/debug@4.1.12)(@types/node@22.13.14)(jiti@2.4.2)(tsx@4.19.3)(yaml@2.7.0)
       vitest-package-exports:
-        specifier: ^0.1.1
+        specifier: catalog:testing
         version: 0.1.1
 
 packages:

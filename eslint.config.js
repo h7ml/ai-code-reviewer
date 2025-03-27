@@ -32,10 +32,24 @@ export default antfu(
       // 忽略YAML文件
       '**/*.yml',
       '**/*.yaml',
+      'pnpm-workspace.yaml',
+
       // 忽略特定目录
       '.specstory',
+      '.specstory/**',
       'dist',
+      'dist/**',
       'node_modules',
+      'node_modules/**',
+
+      // 忽略项目历史文件
+      '.git/**',
+      '.github/**',
+      '.vscode/**',
+
+      // 忽略构建产物
+      'build/**',
+      'coverage/**',
     ],
   },
 )

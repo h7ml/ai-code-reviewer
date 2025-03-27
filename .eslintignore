@@ -1,8 +1,0 @@
-# 忽略YAML文件
-**/*.yml
-**/*.yaml
-pnpm-workspace.yaml
-
-# 忽略生成的文件
-dist/
-node_modules/

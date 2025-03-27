@@ -2,6 +2,7 @@
   "name": "@dext7r/ai-code-reviewer",
   "type": "module",
   "version": "0.1.0",
+  "private": false,
   "packageManager": "pnpm@10.6.2",
   "description": "一个用于GitLab/GitHub或通用代码托管平台的自动化代码审查工具",
   "author": {
@@ -37,9 +38,9 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "bin": {
-    "reviewer":"./dist/cli.mjs",
-    "ai-reviewer": "./dist/cli.mjs",
-    "ai-code-reviewer": "./dist/cli.mjs"
+    "reviewer": "dist/cli.mjs",
+    "ai-reviewer": "dist/cli.mjs",
+    "ai-code-reviewer": "dist/cli.mjs"
   },
   "files": [
     "bin",
@@ -59,31 +60,31 @@
     "prepare": "simple-git-hooks"
   },
   "dependencies": {
-    "cac": "catalog:",
-    "chalk": "catalog:",
-    "consola": "catalog:",
-    "cross-fetch": "catalog:",
-    "dotenv": "catalog:",
-    "openai": "catalog:",
-    "yaml": "catalog:conflicts_testing_h2_3_4"
+    "cac": "^6.7.14",
+    "chalk": "^5.3.0",
+    "consola": "^3.2.3",
+    "cross-fetch": "^4.0.0",
+    "dotenv": "^16.3.1",
+    "openai": "^4.24.1",
+    "yaml": "^2.3.4"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "catalog:conflicts_cli_h4_11_0",
-    "@antfu/ni": "catalog:conflicts_cli_h24_3_0",
-    "@antfu/utils": "catalog:inlined",
-    "@types/node": "catalog:conflicts_types_h22_13_14",
-    "bumpp": "catalog:cli",
-    "eslint": "catalog:conflicts_cli_h9_23_0",
-    "fast-glob": "catalog:",
-    "lint-staged": "catalog:cli",
-    "simple-git-hooks": "catalog:conflicts_cli_h2_12_1",
-    "tinyexec": "catalog:conflicts_utils_h1_0_0",
-    "tsx": "catalog:cli",
-    "typescript": "catalog:cli",
-    "unbuild": "catalog:cli",
-    "vite": "catalog:conflicts_cli_h6_2_3",
-    "vitest": "catalog:conflicts_testing_h3_0_9",
-    "vitest-package-exports": "catalog:testing"
+    "@antfu/eslint-config": "^2.6.1",
+    "@antfu/ni": "^0.21.12",
+    "@antfu/utils": "^0.7.6",
+    "@types/node": "^20.10.5",
+    "bumpp": "^9.2.0",
+    "eslint": "^8.56.0",
+    "fast-glob": "^3.3.2",
+    "lint-staged": "^15.2.0",
+    "simple-git-hooks": "^2.9.0",
+    "tinyexec": "^1.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "unbuild": "^2.0.0",
+    "vite": "^5.0.10",
+    "vitest": "^1.0.4",
+    "vitest-package-exports": "^0.1.1"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm i --frozen-lockfile --ignore-scripts --offline && npx lint-staged"

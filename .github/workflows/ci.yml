@@ -77,7 +77,15 @@ jobs:
 
       - run: pnpm i -g @antfu/ni
       - run: nci
-      - name: Build with increased memory limit
+      - name: Build
+        if: runner.os != 'Windows'
         run: NODE_OPTIONS="--max-old-space-size=4096" nr build
-      - name: Test with increased memory limit
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: nr build
+      - name: Test
+        if: runner.os != 'Windows'
         run: NODE_OPTIONS="--max-old-space-size=4096" nr test
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        run: nr test

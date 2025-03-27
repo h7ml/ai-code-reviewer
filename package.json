@@ -1,29 +1,43 @@
 {
-  "name": "pkg-placeholder",
+  "name": "ai-code-reviewer",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "packageManager": "pnpm@10.6.2",
-  "description": "_description_",
-  "author": "Anthony Fu <anthonyfu117@hotmail.com>",
+  "description": "一个用于GitLab/GitHub或通用代码托管平台的自动化代码审查工具",
+  "author": "AI Code Reviewer Team",
   "license": "MIT",
-  "funding": "https://github.com/sponsors/antfu",
-  "homepage": "https://github.com/antfu/pkg-placeholder#readme",
+  "homepage": "https://github.com/ai-code-reviewer/ai-code-reviewer#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/antfu/pkg-placeholder.git"
+    "url": "git+https://github.com/ai-code-reviewer/ai-code-reviewer.git"
   },
-  "bugs": "https://github.com/antfu/pkg-placeholder/issues",
-  "keywords": [],
+  "bugs": "https://github.com/ai-code-reviewer/ai-code-reviewer/issues",
+  "keywords": [
+    "code-review",
+    "ai",
+    "automation",
+    "gitlab",
+    "github",
+    "openai",
+    "ollama"
+  ],
   "sideEffects": false,
   "exports": {
-    ".": "./dist/index.mjs",
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
     "./package.json": "./package.json"
   },
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
+  "bin": {
+    "ai-review": "./dist/cli.mjs"
+  },
   "files": [
-    "dist"
+    "dist",
+    "bin"
   ],
   "scripts": {
     "build": "unbuild",
@@ -32,17 +46,28 @@
     "prepublishOnly": "nr build",
     "release": "bumpp && pnpm publish",
     "start": "tsx src/index.ts",
+    "cli": "tsx src/cli.ts",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "prepare": "simple-git-hooks"
+  },
+  "dependencies": {
+    "cac": "^6.7.14",
+    "chalk": "^5.3.0",
+    "consola": "^3.2.3",
+    "cross-fetch": "^3.1.5",
+    "dotenv": "^16.3.1",
+    "openai": "^4.19.0",
+    "yaml": "^2.3.4"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:cli",
     "@antfu/ni": "catalog:cli",
     "@antfu/utils": "catalog:inlined",
-    "@types/node": "catalog:types",
+    "@types/node": "^18.0.0",
     "bumpp": "catalog:cli",
     "eslint": "catalog:cli",
+    "fast-glob": "^3.3.3",
     "lint-staged": "catalog:cli",
     "simple-git-hooks": "catalog:cli",
     "tinyexec": "catalog:utils",
@@ -51,8 +76,7 @@
     "unbuild": "catalog:cli",
     "vite": "catalog:cli",
     "vitest": "catalog:testing",
-    "vitest-package-exports": "catalog:testing",
-    "yaml": "catalog:testing"
+    "vitest-package-exports": "catalog:testing"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm i --frozen-lockfile --ignore-scripts --offline && npx lint-staged"

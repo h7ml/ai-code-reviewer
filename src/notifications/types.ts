@@ -32,4 +32,12 @@ export interface NotificationManager {
     summary: string,
     platform: Platform
   ) => Promise<void>
+
+  /**
+   * 批量发送审查通知
+   */
+  sendBatchReviewNotifications: (
+    results: ReviewResult[],
+    platform: Platform
+  ) => Promise<void>
 }

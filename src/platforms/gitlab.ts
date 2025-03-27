@@ -1,6 +1,7 @@
 import { consola } from 'consola'
 import fetch from 'cross-fetch'
-import type { CodeDiff } from '../core/reviewer'
+import type { CodeDiff, ReviewResult } from '../core/reviewer'
+import { detectLanguage } from '../utils/language'
 import type { Platform, PlatformConfig, PlatformOptions } from './types'
 
 /**
@@ -215,44 +216,61 @@ export class GitLabPlatform implements Platform {
    * 检测文件语言
    */
   private detectLanguage(filePath: string): string | undefined {
-    const ext = filePath.split('.').pop()?.toLowerCase()
-    if (!ext)
-      return undefined
+    // 使用共享的语言映射工具
+    return detectLanguage(filePath)
+  }
 
-    const languageMap: Record<string, string> = {
-      js: 'javascript',
-      ts: 'typescript',
-      jsx: 'javascript',
-      tsx: 'typescript',
-      py: 'python',
-      rb: 'ruby',
-      php: 'php',
-      java: 'java',
-      go: 'go',
-      cs: 'csharp',
-      cpp: 'cpp',
-      c: 'c',
-      h: 'c',
-      hpp: 'cpp',
-      rs: 'rust',
-      swift: 'swift',
-      kt: 'kotlin',
-      scala: 'scala',
-      md: 'markdown',
-      html: 'html',
-      css: 'css',
-      scss: 'scss',
-      sass: 'sass',
-      less: 'less',
-      json: 'json',
-      yml: 'yaml',
-      yaml: 'yaml',
-      xml: 'xml',
-      sql: 'sql',
-      sh: 'shell',
-      bash: 'shell',
+  /**
+   * 批量提交审查评论
+   */
+  async submitBatchReviewComments(results: ReviewResult[]): Promise<void> {
+    try {
+      consola.debug('批量提交GitLab评论')
+
+      // GitLab不支持批量评论，需要逐个提交
+      for (const result of results) {
+        // 过滤有行号的评论
+        const lineIssues = result.issues.filter(issue => issue.line)
+        for (const issue of lineIssues) {
+          const message = this.formatIssueComment(issue)
+          await this.submitReviewComment(result.file, issue.line, message)
+        }
+
+        // 合并没有行号的评论作为一条文件级评论
+        const generalIssues = result.issues.filter(issue => !issue.line)
+        if (generalIssues.length > 0) {
+          const fileComment = `## 文件: ${result.file}\n\n${
+            generalIssues.map(issue => this.formatIssueComment(issue)).join('\n\n')}`
+          await this.submitReviewComment(result.file, undefined, fileComment)
+        }
+      }
+    }
+    catch (error) {
+      consola.error('批量提交GitLab评论时出错:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 格式化问题评论
+   */
+  private formatIssueComment(issue: ReviewResult['issues'][0]): string {
+    const severityEmoji = {
+      error: '❌',
+      warning: '⚠️',
+      info: 'ℹ️',
+    }[issue.severity]
+
+    let comment = `${severityEmoji} **${issue.message}**\n\n`
+
+    if (issue.suggestion) {
+      comment += `建议: ${issue.suggestion}\n\n`
     }
 
-    return languageMap[ext]
+    if (issue.code) {
+      comment += `示例代码:\n\`\`\`\n${issue.code}\n\`\`\`\n`
+    }
+
+    return comment
   }
 }

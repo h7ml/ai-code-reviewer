@@ -1,6 +1,7 @@
 import { consola } from 'consola'
 import fetch from 'cross-fetch'
-import type { CodeDiff } from '../core/reviewer'
+import type { CodeDiff, ReviewResult } from '../core/reviewer'
+import { detectLanguage } from '../utils/language'
 import type { Platform, PlatformConfig, PlatformOptions } from './types'
 
 /**
@@ -91,54 +92,30 @@ export class GitHubPlatform implements Platform {
    */
   async submitReviewComment(filePath: string, line: number | undefined, comment: string): Promise<void> {
     try {
-      // 首先需要创建一个审查
-      const reviewResponse = await fetch(
-        `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}/reviews`,
+      // 获取提交SHA，用于添加评论
+      const pullResponse = await fetch(
+        `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}`,
         {
-          method: 'POST',
           headers: {
-            'Authorization': `token ${this.token}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json',
+            Authorization: `token ${this.token}`,
+            Accept: 'application/vnd.github.v3+json',
           },
-          body: JSON.stringify({
-            event: 'COMMENT',
-          }),
         },
       )
 
-      if (!reviewResponse.ok) {
-        const errorText = await reviewResponse.text()
-        throw new Error(`GitHub API创建审查失败: ${reviewResponse.status} ${errorText}`)
+      if (!pullResponse.ok) {
+        const errorText = await pullResponse.text()
+        throw new Error(`GitHub API获取PR信息失败: ${pullResponse.status} ${errorText}`)
       }
 
-      const reviewData = await reviewResponse.json()
-      const reviewId = reviewData.id
+      const pullData = await pullResponse.json()
+      const commitId = pullData.head.sha
 
       // 如果有具体行号，添加行注释
       if (line) {
-        // 获取提交SHA
-        const pullResponse = await fetch(
-          `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}`,
-          {
-            headers: {
-              Authorization: `token ${this.token}`,
-              Accept: 'application/vnd.github.v3+json',
-            },
-          },
-        )
-
-        if (!pullResponse.ok) {
-          const errorText = await pullResponse.text()
-          throw new Error(`GitHub API获取PR信息失败: ${pullResponse.status} ${errorText}`)
-        }
-
-        const pullData = await pullResponse.json()
-        const commitId = pullData.head.sha
-
-        // 添加审查评论
-        const commentResponse = await fetch(
-          `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}/reviews/${reviewId}/comments`,
+        // 创建一个审查并添加评论
+        const reviewResponse = await fetch(
+          `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}/reviews`,
           {
             method: 'POST',
             headers: {
@@ -147,24 +124,28 @@ export class GitHubPlatform implements Platform {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              path: filePath,
-              line,
-              side: 'RIGHT',
               commit_id: commitId,
-              body: comment,
+              event: 'COMMENT',
+              comments: [
+                {
+                  path: filePath,
+                  position: line,
+                  body: comment,
+                },
+              ],
             }),
           },
         )
 
-        if (!commentResponse.ok) {
-          const errorText = await commentResponse.text()
-          throw new Error(`GitHub API添加评论失败: ${commentResponse.status} ${errorText}`)
+        if (!reviewResponse.ok) {
+          const errorText = await reviewResponse.text()
+          throw new Error(`GitHub API创建审查失败: ${reviewResponse.status} ${errorText}`)
         }
 
         consola.debug(`已向文件 ${filePath} 第 ${line} 行提交评论`)
       }
       else {
-        // 提交审查评论
+        // 提交PR级别的评论
         await this.submitReviewSummary(comment)
       }
     }
@@ -241,44 +222,118 @@ export class GitHubPlatform implements Platform {
    * 检测文件语言
    */
   private detectLanguage(filePath: string): string | undefined {
-    const ext = filePath.split('.').pop()?.toLowerCase()
-    if (!ext)
-      return undefined
+    // 使用共享的语言映射工具
+    return detectLanguage(filePath)
+  }
 
-    const languageMap: Record<string, string> = {
-      js: 'javascript',
-      ts: 'typescript',
-      jsx: 'javascript',
-      tsx: 'typescript',
-      py: 'python',
-      rb: 'ruby',
-      php: 'php',
-      java: 'java',
-      go: 'go',
-      cs: 'csharp',
-      cpp: 'cpp',
-      c: 'c',
-      h: 'c',
-      hpp: 'cpp',
-      rs: 'rust',
-      swift: 'swift',
-      kt: 'kotlin',
-      scala: 'scala',
-      md: 'markdown',
-      html: 'html',
-      css: 'css',
-      scss: 'scss',
-      sass: 'sass',
-      less: 'less',
-      json: 'json',
-      yml: 'yaml',
-      yaml: 'yaml',
-      xml: 'xml',
-      sql: 'sql',
-      sh: 'shell',
-      bash: 'shell',
+  /**
+   * 批量提交审查评论
+   */
+  async submitBatchReviewComments(results: ReviewResult[]): Promise<void> {
+    try {
+      // 获取提交SHA，用于添加评论
+      const pullResponse = await fetch(
+        `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}`,
+        {
+          headers: {
+            Authorization: `token ${this.token}`,
+            Accept: 'application/vnd.github.v3+json',
+          },
+        },
+      )
+
+      if (!pullResponse.ok) {
+        const errorText = await pullResponse.text()
+        throw new Error(`GitHub API获取PR信息失败: ${pullResponse.status} ${errorText}`)
+      }
+
+      const pullData = await pullResponse.json()
+      const commitId = pullData.head.sha
+
+      // 准备所有评论
+      const comments = []
+
+      // 收集每个文件的所有行评论
+      for (const result of results) {
+        for (const issue of result.issues) {
+          if (issue.line) { // 只收集有行号的评论
+            const message = this.formatIssueComment(issue)
+            comments.push({
+              path: result.file,
+              position: issue.line,
+              body: message,
+            })
+          }
+        }
+      }
+
+      // 如果有行评论，创建一个批量审查
+      if (comments.length > 0) {
+        const reviewResponse = await fetch(
+          `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}/reviews`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `token ${this.token}`,
+              'Accept': 'application/vnd.github.v3+json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              commit_id: commitId,
+              event: 'COMMENT',
+              comments,
+            }),
+          },
+        )
+
+        if (!reviewResponse.ok) {
+          const errorText = await reviewResponse.text()
+          throw new Error(`GitHub API批量创建评论失败: ${reviewResponse.status} ${errorText}`)
+        }
+
+        consola.debug(`已批量提交 ${comments.length} 条行评论`)
+      }
+
+      // 对于没有行号的评论，添加到问题评论中
+      for (const result of results) {
+        const generalIssues = result.issues.filter(issue => !issue.line)
+
+        if (generalIssues.length > 0) {
+          // 将一个文件的所有通用评论合并成一条
+          const fileComment = `## 文件: ${result.file}\n\n${
+            generalIssues.map(issue => this.formatIssueComment(issue)).join('\n\n')}`
+
+          // 提交文件级评论
+          await this.submitReviewComment(result.file, undefined, fileComment)
+        }
+      }
+    }
+    catch (error) {
+      consola.error('批量提交GitHub评论时出错:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 格式化问题评论
+   */
+  private formatIssueComment(issue: ReviewResult['issues'][0]): string {
+    const severityEmoji = {
+      error: '❌',
+      warning: '⚠️',
+      info: 'ℹ️',
+    }[issue.severity]
+
+    let comment = `${severityEmoji} **${issue.message}**\n\n`
+
+    if (issue.suggestion) {
+      comment += `建议: ${issue.suggestion}\n\n`
     }
 
-    return languageMap[ext]
+    if (issue.code) {
+      comment += `示例代码:\n\`\`\`\n${issue.code}\n\`\`\`\n`
+    }
+
+    return comment
   }
 }

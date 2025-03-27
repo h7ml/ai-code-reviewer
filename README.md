@@ -47,17 +47,17 @@ notifications:
   wecom:
     enabled: false
     webhook: YOUR_WEBHOOK_URL
-    
+
 # 审查配置（可选）
 review:
   # 忽略文件
   ignoreFiles:
-    - "*.lock"
-    - "*.min.js"
+    - '*.lock'
+    - '*.min.js'
   # 忽略路径
   ignorePaths:
-    - "node_modules/"
-    - "dist/"
+    - node_modules/
+    - dist/
   # 自定义提示
   prompts:
     # 系统提示

@@ -7,6 +7,8 @@ import { createAiProvider } from '../ai/provider'
 import { validateConfig } from '../config/config'
 import { createNotificationManager } from '../notifications/index'
 import { createPlatform } from '../platforms/index'
+import { TempFileManager } from '../utils/file'
+import { OutputFormatter } from '../utils/formatter'
 
 export interface CodeReviewOptions {
   config: AiReviewerConfig
@@ -48,6 +50,7 @@ export class CodeReviewer {
   private aiProvider: AiProvider
   private platform: Platform
   private notificationManager: NotificationManager
+  private fileManager: TempFileManager
 
   constructor(options: CodeReviewOptions) {
     this.config = options.config
@@ -73,6 +76,9 @@ export class CodeReviewer {
 
     // 初始化通知管理器
     this.notificationManager = createNotificationManager(this.config.notifications)
+
+    // 初始化文件管理器
+    this.fileManager = new TempFileManager()
   }
 
   /**
@@ -107,19 +113,42 @@ export class CodeReviewer {
         if (reviewResult) {
           results.push(reviewResult)
 
-          // 发送通知
-          await this.notificationManager.sendReviewNotification(
-            diff.newPath,
-            reviewResult,
-            this.platform,
-          )
+          // 判断是否只审查一个文件，如果是则直接输出结果
+          if (filteredDiffs.length === 1) {
+            // 使用格式化工具输出单个文件的详细结果
+            const formattedResult = OutputFormatter.formatSingleFileReview(reviewResult)
+            // eslint-disable-next-line no-console
+            console.log(formattedResult)
+          }
+          else {
+            // 多文件情况下只输出简单信息
+            consola.debug(`已审查文件 ${diff.newPath}，发现 ${reviewResult.issues.length} 个问题`)
+          }
         }
       }
 
-      // 生成总结报告
-      if (results.length > 0) {
-        const summary = await this.aiProvider.generateSummary(results)
+      // 将审查结果保存到临时文件
+      const resultsFilePath = await this.fileManager.saveReviewResults(results)
+      consola.info(`所有审查结果已保存到临时文件：${resultsFilePath}`)
 
+      // 如果有多个文件，生成总结报告
+      let summary = ''
+      if (results.length > 1 && results.length > 0) {
+        summary = await this.aiProvider.generateSummary(results)
+
+        if (summary) {
+          // 将总结保存到临时文件
+          const summaryFilePath = await this.fileManager.saveSummary(summary)
+          consola.info(`审查总结已保存到临时文件：${summaryFilePath}`)
+        }
+      }
+
+      // 如果是多文件，批量发送所有文件的审查结果
+      if (results.length > 1) {
+        consola.info('开始发送审查结果通知...')
+        await this.notificationManager.sendBatchReviewNotifications(results, this.platform)
+
+        // 发送总结通知
         if (summary) {
           await this.notificationManager.sendSummaryNotification(
             summary,
@@ -193,5 +222,83 @@ export class CodeReviewer {
       // 精确匹配
       return filePath === pattern
     })
+  }
+
+  /**
+   * 审查单个文件并提交评论（用于GitHub PR文件审查）
+   * @param targetFile 目标文件的路径
+   */
+  async reviewSingleFile(targetFile: string): Promise<ReviewResult | null> {
+    consola.info(`开始审查单个文件: ${targetFile}`)
+
+    try {
+      // 获取所有代码差异
+      const diffs = await this.platform.getCodeDiffs()
+      consola.info(`获取到 ${diffs.length} 个文件差异`)
+
+      if (diffs.length === 0) {
+        consola.warn('没有发现代码差异，审查结束')
+        return null
+      }
+
+      // 查找目标文件的差异
+      const targetDiff = diffs.find(diff => diff.newPath === targetFile)
+      
+      if (!targetDiff) {
+        consola.warn(`未找到目标文件 ${targetFile} 的差异`)
+        return null
+      }
+
+      consola.info(`找到目标文件: ${targetDiff.newPath}`)
+
+      // 调用AI进行代码审查
+      const reviewResult = await this.aiProvider.reviewCode(targetDiff)
+      
+      if (!reviewResult) {
+        consola.warn('审查结果为空')
+        return null
+      }
+
+      // 将结果格式化输出
+      const formattedResult = OutputFormatter.formatSingleFileReview(reviewResult)
+      // eslint-disable-next-line no-console
+      console.log(formattedResult)
+
+      // 对每个问题提交评论
+      for (const issue of reviewResult.issues) {
+        const message = this.formatIssueComment(issue)
+        await this.platform.submitReviewComment(targetFile, issue.line, message)
+      }
+
+      consola.success(`文件 ${targetFile} 审查完成，已添加 ${reviewResult.issues.length} 条评论`)
+      return reviewResult
+    }
+    catch (error) {
+      consola.error(`审查文件 ${targetFile} 时出错:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * 格式化问题评论
+   */
+  private formatIssueComment(issue: ReviewResult['issues'][0]): string {
+    const severityEmoji = {
+      error: '❌',
+      warning: '⚠️',
+      info: 'ℹ️',
+    }[issue.severity]
+
+    let comment = `${severityEmoji} **${issue.message}**\n\n`
+
+    if (issue.suggestion) {
+      comment += `建议: ${issue.suggestion}\n\n`
+    }
+
+    if (issue.code) {
+      comment += `示例代码:\n\`\`\`\n${issue.code}\n\`\`\`\n`
+    }
+
+    return comment
   }
 }

@@ -47,7 +47,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "unbuild",
+    "build": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" unbuild",
     "dev": "unbuild --stub",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -55,7 +55,7 @@
     "release": "bumpp && pnpm publish",
     "start": "tsx src/index.ts",
     "cli": "tsx src/cli.ts",
-    "test": "vitest",
+    "test": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" vitest",
     "typecheck": "tsc --noEmit",
     "prepare": "simple-git-hooks"
   },
@@ -63,6 +63,7 @@
     "cac": "^6.7.14",
     "chalk": "^5.3.0",
     "consola": "^3.2.3",
+    "cross-env": "^7.0.3",
     "cross-fetch": "^4.0.0",
     "dotenv": "^16.3.1",
     "openai": "^4.24.1",

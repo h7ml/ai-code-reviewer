@@ -19,10 +19,10 @@ export interface AiProvider {
   /**
    * 审查代码差异
    */
-  reviewCode(diff: CodeDiff): Promise<ReviewResult>
-  
+  reviewCode: (diff: CodeDiff) => Promise<ReviewResult>
+
   /**
    * 生成审查总结
    */
-  generateSummary(results: ReviewResult[]): Promise<string>
-} 
+  generateSummary: (results: ReviewResult[]) => Promise<string>
+}

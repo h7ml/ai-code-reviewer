@@ -1,10 +1,11 @@
-import { readFile } from 'fs/promises'
-import { resolve, dirname, join } from 'path'
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import { consola } from 'consola'
-import type { Platform, PlatformOptions } from './types'
 import type { CodeDiff } from '../core/reviewer'
+import type { Platform, PlatformOptions } from './types'
+import { exec } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import * as process from 'node:process'
+import { promisify } from 'node:util'
+import { consola } from 'consola'
 import { isNode } from '../utils/env'
 
 const execAsync = promisify(exec)
@@ -20,7 +21,7 @@ export class LocalPlatform implements Platform {
     if (!isNode) {
       consola.warn('本地平台审查功能仅在Node.js环境中可用')
     }
-    
+
     this.path = options.path || (isNode ? process.cwd() : '.')
     this.commitSha = options.commitSha
   }
@@ -34,11 +35,11 @@ export class LocalPlatform implements Platform {
         consola.error('本地平台仅在Node.js环境中支持获取代码差异')
         return []
       }
-      
+
       consola.info(`获取本地路径 ${this.path} 的代码差异`)
-      
+
       let command: string
-      
+
       if (this.commitSha) {
         // 获取特定提交的差异
         command = `git show --name-status ${this.commitSha}`
@@ -47,45 +48,47 @@ export class LocalPlatform implements Platform {
         // 获取工作目录的差异（包括暂存区）
         command = 'git diff --name-status HEAD'
       }
-      
+
       const { stdout } = await execAsync(command, { cwd: this.path })
-      
+
       // 解析git输出获取修改的文件
-      const files: { status: string; file: string }[] = []
-      
+      const files: { status: string, file: string }[] = []
+
       const lines = stdout.trim().split('\n')
       for (const line of lines) {
-        const match = line.match(/^([AMDRT])\s+(.+)$/)
+        // 修复正则表达式避免指数级回溯
+
+        const match = line.match(/^([AMDRT])\s+(\S+)$/)
         if (match) {
           const [, status, file] = match
           files.push({ status, file })
         }
       }
-      
+
       const diffs: CodeDiff[] = []
-      
+
       for (const { status, file } of files) {
         // 跳过删除的文件
         if (status === 'D') {
           continue
         }
-        
+
         try {
           let diffCommand: string
-          
+
           if (this.commitSha) {
             diffCommand = `git show ${this.commitSha} -- ${file}`
           }
           else {
             diffCommand = `git diff HEAD -- ${file}`
           }
-          
+
           const { stdout: diffOutput } = await execAsync(diffCommand, { cwd: this.path })
-          
+
           // 获取文件内容
-          let oldContent = ''
+          const oldContent = ''
           const newContent = await this.getFileContent(file)
-          
+
           diffs.push({
             oldPath: file,
             newPath: file,
@@ -99,7 +102,7 @@ export class LocalPlatform implements Platform {
           consola.warn(`获取文件 ${file} 的差异时出错:`, error)
         }
       }
-      
+
       return diffs
     }
     catch (error) {
@@ -135,7 +138,7 @@ export class LocalPlatform implements Platform {
       if (!isNode) {
         return ''
       }
-      
+
       const fullPath = resolve(this.path, filePath)
       return await readFile(fullPath, 'utf-8')
     }
@@ -150,8 +153,9 @@ export class LocalPlatform implements Platform {
    */
   private detectLanguage(filePath: string): string | undefined {
     const ext = filePath.split('.').pop()?.toLowerCase()
-    if (!ext) return undefined
-    
+    if (!ext)
+      return undefined
+
     const languageMap: Record<string, string> = {
       js: 'javascript',
       ts: 'typescript',
@@ -185,7 +189,7 @@ export class LocalPlatform implements Platform {
       sh: 'shell',
       bash: 'shell',
     }
-    
+
     return languageMap[ext]
   }
-} 
+}

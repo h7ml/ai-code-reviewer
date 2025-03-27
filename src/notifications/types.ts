@@ -19,17 +19,17 @@ export interface NotificationManager {
   /**
    * 发送审查通知
    */
-  sendReviewNotification(
-    filePath: string, 
-    result: ReviewResult, 
+  sendReviewNotification: (
+    filePath: string,
+    result: ReviewResult,
     platform: Platform
-  ): Promise<void>
-  
+  ) => Promise<void>
+
   /**
    * 发送审查总结通知
    */
-  sendSummaryNotification(
-    summary: string, 
+  sendSummaryNotification: (
+    summary: string,
     platform: Platform
-  ): Promise<void>
-} 
+  ) => Promise<void>
+}

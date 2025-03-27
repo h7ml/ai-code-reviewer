@@ -1,7 +1,7 @@
-import { consola } from 'consola'
 import type { Platform, PlatformConfig, PlatformOptions } from './types'
-import { GitLabPlatform } from './gitlab'
+import { consola } from 'consola'
 import { GitHubPlatform } from './github'
+import { GitLabPlatform } from './gitlab'
 import { LocalPlatform } from './local'
 
 /**
@@ -12,7 +12,7 @@ export function createPlatform(
   options: PlatformOptions,
 ): Platform {
   consola.debug(`创建平台: ${config.type}`)
-  
+
   switch (config.type) {
     case 'gitlab':
       return new GitLabPlatform(config, options)
@@ -23,4 +23,4 @@ export function createPlatform(
     default:
       throw new Error(`不支持的平台: ${(config as PlatformConfig).type}`)
   }
-} 
+}

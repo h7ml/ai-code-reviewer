@@ -36,13 +36,14 @@
     "ai-review": "./dist/cli.mjs"
   },
   "files": [
-    "dist",
-    "bin"
+    "bin",
+    "dist"
   ],
   "scripts": {
     "build": "unbuild",
     "dev": "unbuild --stub",
-    "lint": "eslint",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "prepublishOnly": "nr build",
     "release": "bumpp && pnpm publish",
     "start": "tsx src/index.ts",
@@ -52,22 +53,22 @@
     "prepare": "simple-git-hooks"
   },
   "dependencies": {
-    "cac": "^6.7.14",
-    "chalk": "^5.3.0",
-    "consola": "^3.2.3",
-    "cross-fetch": "^3.1.5",
-    "dotenv": "^16.3.1",
-    "openai": "^4.19.0",
-    "yaml": "^2.3.4"
+    "cac": "catalog:",
+    "chalk": "catalog:",
+    "consola": "catalog:",
+    "cross-fetch": "catalog:",
+    "dotenv": "catalog:",
+    "openai": "catalog:",
+    "yaml": "catalog:conflicts_testing_h2_3_4"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:cli",
     "@antfu/ni": "catalog:cli",
     "@antfu/utils": "catalog:inlined",
-    "@types/node": "^18.0.0",
+    "@types/node": "catalog:conflicts_types_h18_0_0",
     "bumpp": "catalog:cli",
     "eslint": "catalog:cli",
-    "fast-glob": "^3.3.3",
+    "fast-glob": "catalog:",
     "lint-staged": "catalog:cli",
     "simple-git-hooks": "catalog:cli",
     "tinyexec": "catalog:utils",
@@ -82,6 +83,7 @@
     "pre-commit": "pnpm i --frozen-lockfile --ignore-scripts --offline && npx lint-staged"
   },
   "lint-staged": {
-    "*": "eslint --fix"
+    "*.{js,jsx,ts,tsx,mjs,cjs}": "eslint --fix --cache",
+    "*.json": "eslint --fix --cache"
   }
 }

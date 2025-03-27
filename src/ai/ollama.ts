@@ -1,7 +1,7 @@
-import fetch from 'cross-fetch'
-import { consola } from 'consola'
-import type { AiProvider, AiProviderConfig } from './types'
 import type { CodeDiff, ReviewResult } from '../core/reviewer'
+import type { AiProvider, AiProviderConfig } from './types'
+import { consola } from 'consola'
+import fetch from 'cross-fetch'
 
 /**
  * Ollama API接口
@@ -32,15 +32,15 @@ export class OllamaProvider implements AiProvider {
     try {
       const language = diff.language || this.detectLanguage(diff.newPath)
       const prompt = this.buildReviewPrompt(diff, language)
-      
+
       consola.debug(`使用Ollama审查文件: ${diff.newPath}`)
-      
+
       const response = await this.generateCompletion(prompt)
-      
+
       if (!response) {
         throw new Error('Ollama响应内容为空')
       }
-      
+
       return this.parseReviewResponse(response, diff.newPath)
     }
     catch (error) {
@@ -55,9 +55,9 @@ export class OllamaProvider implements AiProvider {
   async generateSummary(results: ReviewResult[]): Promise<string> {
     try {
       const prompt = this.buildSummaryPrompt(results)
-      
+
       consola.debug('使用Ollama生成审查总结')
-      
+
       return await this.generateCompletion(prompt)
     }
     catch (error) {
@@ -82,12 +82,12 @@ export class OllamaProvider implements AiProvider {
         stream: false,
       }),
     })
-    
+
     if (!response.ok) {
       const errorText = await response.text()
       throw new Error(`Ollama API请求失败: ${response.status} ${errorText}`)
     }
-    
+
     const data = await response.json() as OllamaCompletionResponse
     return data.response
   }
@@ -122,13 +122,13 @@ ${diff.diffContent}
   private buildSummaryPrompt(results: ReviewResult[]): string {
     const filesCount = results.length
     const issuesCount = results.reduce((sum, result) => sum + result.issues.length, 0)
-    
+
     const resultsSummary = results.map((result) => {
       return `文件: ${result.file}
 问题数: ${result.issues.length}
 问题摘要: ${result.issues.map(issue => `- [${issue.severity}] ${issue.message}`).join('\n')}`
     }).join('\n\n')
-    
+
     return `请总结以下代码审查结果，并提供整体改进建议:
 
 审查了 ${filesCount} 个文件，共发现 ${issuesCount} 个问题。
@@ -156,23 +156,27 @@ ${resultsSummary}
         suggestion?: string
         code?: string
       }> = []
-      
-      // 简单的问题提取
-      const problemRegex = /(\d+)?\s*[:：]\s*(?:\[(error|warning|info)\])?\s*(.+?)(?:\n|$)/gm
-      let match
-      
-      while ((match = problemRegex.exec(content)) !== null) {
-        const line = match[1] ? parseInt(match[1], 10) : undefined
+
+      // 修复正则表达式避免指数级回溯
+      const problemRegex = /(\d+)?\s*[:：]\s*(?:\[(error|warning|info)\]\s*)?([^\n]+)/g
+      let match = problemRegex.exec(content)
+
+      // 使用while循环而非赋值条件
+      while (match !== null) {
+        const line = match[1] ? Number.parseInt(match[1], 10) : undefined
         const severity = (match[2] || 'info') as 'info' | 'warning' | 'error'
         const message = match[3].trim()
-        
+
         issues.push({
           line,
           severity,
           message,
         })
+
+        // 在循环体末尾执行下一次匹配
+        match = problemRegex.exec(content)
       }
-      
+
       // 如果没有找到问题，并且内容不为空，添加一个通用问题
       if (issues.length === 0 && content.trim()) {
         issues.push({
@@ -181,7 +185,7 @@ ${resultsSummary}
           suggestion: content.trim(),
         })
       }
-      
+
       return {
         file: filePath,
         issues,
@@ -190,7 +194,7 @@ ${resultsSummary}
     }
     catch (error) {
       consola.error('解析审查响应时出错:', error)
-      
+
       // 返回一个带有错误信息的结果
       return {
         file: filePath,
@@ -210,12 +214,13 @@ ${resultsSummary}
    * 提取总结
    */
   private extractSummary(content: string): string {
-    const summaryMatch = content.match(/(?:总结|总体评价|Summary)[:：]\s*([\s\S]+?)(?:\n\n|$)/i)
-    
+    // 修复正则表达式避免指数级回溯
+    const summaryMatch = content.match(/(?:总结|总体评价|Summary)[:：]\s*([^\n]+)(?:\n\n|$)/i)
+
     if (summaryMatch && summaryMatch[1]) {
       return summaryMatch[1].trim()
     }
-    
+
     // 如果没有明确的总结部分，取最后一段
     const paragraphs = content.split('\n\n')
     return paragraphs[paragraphs.length - 1].trim()
@@ -226,7 +231,7 @@ ${resultsSummary}
    */
   private detectLanguage(filePath: string): string {
     const ext = filePath.split('.').pop()?.toLowerCase() || ''
-    
+
     const languageMap: Record<string, string> = {
       js: 'JavaScript',
       ts: 'TypeScript',
@@ -257,7 +262,7 @@ ${resultsSummary}
       less: 'Less',
       sql: 'SQL',
     }
-    
+
     return languageMap[ext] || '未知'
   }
-} 
+}

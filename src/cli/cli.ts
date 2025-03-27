@@ -1,8 +1,8 @@
 import { cac } from 'cac'
 import { consola } from 'consola'
+import { version } from '../../package.json'
 import { loadConfig } from '../config/config'
 import { CodeReviewer } from '../core/reviewer'
-import { version } from '../../package.json'
 
 const cli = cac('ai-review')
 
@@ -28,19 +28,19 @@ cli
         consola.error('缺少必要参数: --project-id 和 --mr-id 是必需的')
         process.exit(1)
       }
-      
-      const config = loadConfig(options.config, {
+
+      const config = await loadConfig(options.config, {
         platform: {
           type: 'gitlab',
         },
       })
-      
+
       const reviewer = new CodeReviewer({
         config,
         projectId: options.projectId,
         mergeRequestId: options.mrId,
       })
-      
+
       await reviewer.review()
     }
     catch (error) {
@@ -63,20 +63,20 @@ cli
         consola.error('缺少必要参数: --owner, --repo 和 --pr-id 是必需的')
         process.exit(1)
       }
-      
-      const config = loadConfig(options.config, {
+
+      const config = await loadConfig(options.config, {
         platform: {
           type: 'github',
         },
       })
-      
+
       const reviewer = new CodeReviewer({
         config,
         owner: options.owner,
         repo: options.repo,
         prId: options.prId,
       })
-      
+
       await reviewer.review()
     }
     catch (error) {
@@ -94,18 +94,18 @@ cli
   .option('--commit <sha>', '特定提交的SHA')
   .action(async (options) => {
     try {
-      const config = loadConfig(options.config, {
+      const config = await loadConfig(options.config, {
         platform: {
           type: 'local',
         },
       })
-      
+
       const reviewer = new CodeReviewer({
         config,
         path: options.path,
         commitSha: options.commit,
       })
-      
+
       await reviewer.review()
     }
     catch (error) {
@@ -117,15 +117,15 @@ cli
 /**
  * 解析命令行参数
  */
-function run() {
+function run(): void {
   try {
     cli.parse(process.argv, { run: false })
-    
+
     if (!process.argv.slice(2).length) {
       cli.outputHelp()
       return
     }
-    
+
     cli.runMatchedCommand()
   }
   catch (error) {
@@ -134,4 +134,4 @@ function run() {
   }
 }
 
-export default { run } 
+export default { run }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { initCli } from './cli/commands'
 import { version } from '../package.json'
+import { initCli } from './cli/commands'
 
 // 设置进程标题
 process.title = 'ai-review'
@@ -9,4 +9,4 @@ process.title = 'ai-review'
 console.debug(`AI Code Reviewer v${version}`)
 
 // 执行CLI
-initCli() 
+initCli()

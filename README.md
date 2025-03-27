@@ -35,12 +35,12 @@ yarn global add ai-code-reviewer
 ai:
   provider: openai # 或 ollama
   model: gpt-4 # 或其他模型
-  
-# 平台配置  
+
+# 平台配置
 platform:
   type: gitlab # 或 github
   token: YOUR_TOKEN
-  
+
 # 通知配置
 notifications:
   gitlab_comment: true

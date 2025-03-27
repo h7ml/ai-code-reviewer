@@ -29,15 +29,15 @@ export interface Platform {
   /**
    * 获取代码差异
    */
-  getCodeDiffs(): Promise<CodeDiff[]>
-  
+  getCodeDiffs: () => Promise<CodeDiff[]>
+
   /**
    * 提交审查评论
    */
-  submitReviewComment(filePath: string, line: number | undefined, comment: string): Promise<void>
-  
+  submitReviewComment: (filePath: string, line: number | undefined, comment: string) => Promise<void>
+
   /**
    * 提交审查总结
    */
-  submitReviewSummary(summary: string): Promise<void>
-} 
+  submitReviewSummary: (summary: string) => Promise<void>
+}

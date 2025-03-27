@@ -1,8 +1,8 @@
-import { existsSync, readFileSync } from 'fs'
-import { resolve } from 'path'
-import process from 'process'
-import yaml from 'yaml'
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import * as process from 'node:process'
 import { consola } from 'consola'
+import yaml from 'yaml'
 
 /**
  * 配置格式接口
@@ -40,7 +40,7 @@ export interface AiReviewerConfig {
 const defaultConfig: AiReviewerConfig = {
   ai: {
     provider: 'openai',
-    model: 'gpt-4',
+    model: 'deepseek-r1:1.5b',
     temperature: 0.1,
     maxTokens: 4000,
   },
@@ -76,7 +76,7 @@ const defaultConfig: AiReviewerConfig = {
  */
 function loadEnvConfig(): Partial<AiReviewerConfig> {
   const config: Partial<AiReviewerConfig> = {
-    ai: { 
+    ai: {
       provider: (process.env.AI_REVIEWER_PROVIDER as 'openai' | 'ollama') || undefined,
       model: process.env.AI_REVIEWER_MODEL || 'deepseek-r1:1.5b',
       apiKey: process.env.AI_REVIEWER_OPENAI_KEY,
@@ -102,7 +102,7 @@ function loadEnvConfig(): Partial<AiReviewerConfig> {
 /**
  * 从配置文件加载配置
  */
-function loadConfigFile(configPath?: string): Partial<AiReviewerConfig> {
+async function loadConfigFile(configPath?: string): Promise<Partial<AiReviewerConfig>> {
   const configPaths = [
     configPath,
     '.aireviewrc.yml',
@@ -123,11 +123,13 @@ function loadConfigFile(configPath?: string): Partial<AiReviewerConfig> {
           return yaml.parse(content)
         }
         else if (path.endsWith('.js')) {
-          // 使用动态导入替代eval
+          // 使用动态导入替代require
           try {
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            return require(fullPath)
-          } catch (e) {
+            // 使用动态导入替代require
+            const config = await import(fullPath)
+            return config.default || config
+          }
+          catch (e) {
             consola.error(`Failed to load JS config from ${fullPath}`, e)
             return {}
           }
@@ -173,14 +175,14 @@ function mergeConfig(
     // 合并通知配置
     if (config.notifications) {
       merged.notifications = { ...merged.notifications }
-      
+
       if (config.notifications.gitlab_comment !== undefined) {
         merged.notifications.gitlab_comment = config.notifications.gitlab_comment
       }
-      
+
       if (config.notifications.wecom) {
-        merged.notifications.wecom = { 
-          ...merged.notifications.wecom, 
+        merged.notifications.wecom = {
+          ...merged.notifications.wecom,
           ...config.notifications.wecom,
         }
       }
@@ -189,25 +191,25 @@ function mergeConfig(
     // 合并审查配置
     if (config.review) {
       merged.review = { ...merged.review }
-      
+
       if (config.review.ignoreFiles) {
         merged.review.ignoreFiles = [
           ...(merged.review.ignoreFiles || []),
           ...config.review.ignoreFiles,
         ]
       }
-      
+
       if (config.review.ignorePaths) {
         merged.review.ignorePaths = [
           ...(merged.review.ignorePaths || []),
           ...config.review.ignorePaths,
         ]
       }
-      
+
       if (config.review.includePatterns) {
         merged.review.includePatterns = config.review.includePatterns
       }
-      
+
       if (config.review.excludePatterns) {
         merged.review.excludePatterns = config.review.excludePatterns
       }
@@ -220,12 +222,12 @@ function mergeConfig(
 /**
  * 加载和合并所有配置
  */
-export function loadConfig(
+export async function loadConfig(
   configPath?: string,
   cliConfig: Partial<AiReviewerConfig> = {},
-): AiReviewerConfig {
+): Promise<AiReviewerConfig> {
   // 加载各种配置源
-  const fileConfig = loadConfigFile(configPath)
+  const fileConfig = await loadConfigFile(configPath)
   const envConfig = loadEnvConfig()
 
   // 合并所有配置
@@ -254,4 +256,4 @@ export function validateConfig(config: AiReviewerConfig): boolean {
   }
 
   return true
-} 
+}

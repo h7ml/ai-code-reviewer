@@ -63,13 +63,13 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           GITHUB_OUTPUT: ${{ github.output }}
-          
+
           # 自定义环境变量
           API_KEY: ${{ secrets.AI_REVIEWER_OPENAI_KEY }}
           AI_REVIEWER_OPENAI_KEY: ${{ secrets.AI_REVIEWER_OPENAI_KEY }}
           AI_REVIEWER_GITHUB_TOKEN: ${{ secrets.AI_REVIEWER_GITHUB_TOKEN }}
-          AI_REVIEWER_MODEL: ${{ secrets.AI_REVIEWER_MODEL || 'gpt-3.5-turbo' }}
-          AI_REVIEWER_BASE_URL: ${{ secrets.AI_REVIEWER_BASE_URL || 'https://api.openai.com/v1' }}
+          AI_REVIEWER_MODEL: ${{ secrets.AI_REVIEWER_MODEL || 'deepseek/deepseek-chat-v3-0324:free' }}
+          AI_REVIEWER_BASE_URL: ${{ secrets.AI_REVIEWER_BASE_URL || 'https://openrouter.ai' }}
           AI_REVIEWER_PROMPT_SYSTEM: ${{ secrets.AI_REVIEWER_PROMPT_SYSTEM }}
           AI_REVIEWER_PROMPT_REVIEW: ${{ secrets.AI_REVIEWER_PROMPT_REVIEW }}
           AI_REVIEWER_PROMPT_SUMMARY: ${{ secrets.AI_REVIEWER_PROMPT_SUMMARY }}
@@ -88,6 +88,6 @@ jobs:
             --pr-id ${{ steps.setup.outputs.pr_number }}
         env:
           AI_REVIEWER_OPENAI_KEY: ${{ secrets.AI_REVIEWER_OPENAI_KEY }}
-          AI_REVIEWER_MODEL: ${{ secrets.AI_REVIEWER_MODEL || 'gpt-3.5-turbo' }}
-          AI_REVIEWER_BASE_URL: ${{ secrets.AI_REVIEWER_BASE_URL || 'https://api.openai.com/v1' }}
+          AI_REVIEWER_MODEL: ${{ secrets.AI_REVIEWER_MODEL || 'deepseek/deepseek-chat-v3-0324:free' }}
+          AI_REVIEWER_BASE_URL: ${{ secrets.AI_REVIEWER_BASE_URL || 'https://openrouter.ai' }}
           AI_REVIEWER_GITHUB_TOKEN: ${{ secrets.AI_REVIEWER_GITHUB_TOKEN }}

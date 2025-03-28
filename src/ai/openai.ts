@@ -42,8 +42,6 @@ export class OpenAIProvider implements AiProvider {
         clientOptions.baseURL = `${clientOptions.baseURL.replace(/\/$/, '')}/api/v1`
         consola.info(`OpenRouter API URL已调整为: ${clientOptions.baseURL}`)
       }
-
-      // 移除模型名称格式调整逻辑，由用户完全控制模型格式
     }
 
     consola.debug(`OpenAI/OpenRouter客户端初始化配置: ${JSON.stringify({
@@ -53,7 +51,14 @@ export class OpenAIProvider implements AiProvider {
       hasDefaultHeaders: !!clientOptions.defaultHeaders,
     })}`)
 
-    this.client = new OpenAI(clientOptions)
+    try {
+      this.client = new OpenAI(clientOptions)
+      consola.success('OpenAI/OpenRouter客户端初始化成功')
+    }
+    catch (error) {
+      consola.error('OpenAI/OpenRouter客户端初始化失败:', error)
+      throw error
+    }
   }
 
   /**
@@ -74,6 +79,7 @@ export class OpenAIProvider implements AiProvider {
 4. 提供总结`
 
       try {
+        consola.debug('准备发送API请求...')
         const response = await this.client.chat.completions.create({
           model: this.config.model,
           temperature: this.config.temperature || 0.1,

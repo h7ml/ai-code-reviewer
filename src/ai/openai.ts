@@ -42,6 +42,11 @@ export class OpenAIProvider implements AiProvider {
         clientOptions.baseURL = `${clientOptions.baseURL.replace(/\/$/, '')}/api/v1`
         consola.info(`OpenRouter API URL已调整为: ${clientOptions.baseURL}`)
       }
+
+      // 为OpenRouter添加模型路由
+      if (config.model.includes('/')) {
+        clientOptions.defaultHeaders['HTTP-Referer'] = `https://github.com/h7ml/ai-code-reviewer (${config.model})`
+      }
     }
 
     consola.debug(`OpenAI/OpenRouter客户端初始化配置: ${JSON.stringify({
@@ -80,7 +85,7 @@ export class OpenAIProvider implements AiProvider {
 
       try {
         consola.debug('准备发送API请求...')
-        const response = await this.client.chat.completions.create({
+        const requestBody = {
           model: this.config.model,
           temperature: this.config.temperature || 0.1,
           max_tokens: this.config.maxTokens || 4000,
@@ -89,15 +94,24 @@ export class OpenAIProvider implements AiProvider {
           presence_penalty: 0,
           messages: [
             {
-              role: 'system',
+              role: 'system' as const,
               content: systemPrompt,
             },
             {
-              role: 'user',
+              role: 'user' as const,
               content: prompt,
             },
           ],
-        })
+        }
+
+        consola.debug(`API请求体: ${JSON.stringify({
+          model: requestBody.model,
+          temperature: requestBody.temperature,
+          max_tokens: requestBody.max_tokens,
+          messages_count: requestBody.messages.length,
+        }, null, 2)}`)
+
+        const response = await this.client.chat.completions.create(requestBody)
 
         consola.debug(`API响应: ${JSON.stringify({
           id: response.id,
@@ -106,6 +120,15 @@ export class OpenAIProvider implements AiProvider {
           created: response.created,
           choices_length: response.choices?.length || 0,
           has_choices: !!response.choices && response.choices.length > 0,
+          first_choice: response.choices?.[0]
+            ? {
+                index: response.choices[0].index,
+                finish_reason: response.choices[0].finish_reason,
+                has_message: !!response.choices[0].message,
+                message_role: response.choices[0].message?.role,
+                message_length: response.choices[0].message?.content?.length,
+              }
+            : null,
         }, null, 2)}`)
 
         if (!response.choices || response.choices.length === 0) {
@@ -138,6 +161,7 @@ export class OpenAIProvider implements AiProvider {
             status: error.response.status,
             statusText: error.response.statusText,
             data: error.response.data,
+            headers: error.response.headers,
           })}`)
         }
         throw error
@@ -175,11 +199,11 @@ export class OpenAIProvider implements AiProvider {
           presence_penalty: 0,
           messages: [
             {
-              role: 'system',
+              role: 'system' as const,
               content: systemPrompt,
             },
             {
-              role: 'user',
+              role: 'user' as const,
               content: prompt,
             },
           ],

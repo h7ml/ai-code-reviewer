@@ -243,7 +243,7 @@ export class OpenAIProvider implements AiProvider {
         .replace('{{diffContent}}', diff.diffContent)
     }
 
-    return `请审查以下${language}代码差异，并提供改进建议:
+    return `请以专业代码审查者的身份审查以下${language}代码差异。
 
 文件路径: ${diff.newPath}
 
@@ -252,15 +252,30 @@ export class OpenAIProvider implements AiProvider {
 ${diff.diffContent}
 \`\`\`
 
-请关注以下方面:
-1. 代码质量问题
-2. 潜在的错误和缺陷
-3. 性能优化建议
-4. 安全隐患
-5. 可读性和维护性改进
-6. 最佳实践建议
+请按照以下结构提供评论：
 
-请提供具体的问题位置、严重程度和改进建议。返回JSON格式的审查结果。`
+1. **总体评价**: 简要总结代码质量，包括积极方面和需要改进的地方
+2. **关键发现**: 按优先级列出最重要的问题
+3. **详细分析**: 对每个问题进行详细说明，每个问题包含：
+   - 严重性: 低(info) | 中(warning) | 高(error)
+   - 问题位置: 具体到行号
+   - 问题描述: 清晰说明问题所在
+   - 改进建议: 提供具体的改进方法，可能包含代码示例
+   - 解释理由: 简要解释为什么这是一个问题或为什么建议的改进是有益的
+4. **最佳实践**: 指出代码中遵循或违反的最佳实践
+5. **学习资源**: 酌情提供相关文档或学习资源链接
+
+请以JSON格式返回响应，包含以下字段:
+1. file: 文件路径
+2. summary: 总体评价摘要
+3. issues: 问题数组，每个问题包含:
+   - severity: 'info' | 'warning' | 'error'
+   - line: 行号(可选)
+   - message: 问题描述
+   - suggestion: 改进建议(可选)
+   - code: 示例代码(可选)
+
+确保分析全面且具有建设性，重点关注可行的改进而不仅仅是指出问题。`
   }
 
   /**
@@ -369,24 +384,81 @@ ${detailedResults}
         code?: string
       }> = []
 
-      // 修复正则表达式避免指数级回溯
-      const problemRegex = /(\d+)?\s*[:：]\s*(?:\[(error|warning|info)\]\s*)?([^\n]+)/g
-      let match = problemRegex.exec(content)
+      // 尝试提取总体评价
+      const summary = this.extractSummary(content)
 
-      // 使用while循环而非赋值条件
-      while (match !== null) {
-        const line = match[1] ? Number.parseInt(match[1], 10) : undefined
-        const severity = (match[2] || 'info') as 'info' | 'warning' | 'error'
-        const message = match[3].trim()
+      // 提取关键问题
+      // 尝试匹配问题部分，支持CodeRabbitAI风格的问题格式
+      const problemSections = content.split(/###\s+/).filter(Boolean)
 
-        issues.push({
-          line,
-          severity,
-          message,
-        })
+      for (const section of problemSections) {
+        // 跳过不是问题描述的部分
+        if (!/🔴|🟠|🔵|严重问题|警告|建议|error|warning|info/i.test(section)) {
+          continue
+        }
 
-        // 在循环体末尾执行下一次匹配
-        match = problemRegex.exec(content)
+        let severity: 'error' | 'warning' | 'info' = 'info'
+
+        if (/🔴|严重问题|error/i.test(section)) {
+          severity = 'error'
+        }
+        else if (/🟠|警告|warning/i.test(section)) {
+          severity = 'warning'
+        }
+
+        // 提取每个问题
+        const problemMatches = section.match(/####\s+(.+?):(.+?)(?=####|$)/gs)
+
+        if (problemMatches) {
+          for (const problemMatch of problemMatches) {
+            // 提取行号
+            const lineMatch = problemMatch.match(/####\s+第(\d+)行:/)
+            const line = lineMatch ? Number.parseInt(lineMatch[1], 10) : undefined
+
+            // 提取消息
+            const messageMatch = problemMatch.match(/####\s+(?:第\d+行|整体):\s*(.+)(?:\n|$)/)
+            const message = messageMatch ? messageMatch[1].trim() : '未知问题'
+
+            // 提取建议
+            const suggestionMatch = problemMatch.match(/\*\*💡 改进建议:\*\*\n([\s\S]*?)(?=\*\*|$)/)
+            const suggestion = suggestionMatch ? suggestionMatch[1].trim() : undefined
+
+            // 提取代码示例
+            const codeMatch = problemMatch.match(/```\n([\s\S]*?)\n```/)
+            const code = codeMatch ? codeMatch[1] : undefined
+
+            issues.push({
+              line,
+              severity,
+              message,
+              suggestion,
+              code,
+            })
+          }
+        }
+      }
+
+      // 如果上面的方法没有提取到问题，使用旧的方法进行提取
+      if (issues.length === 0) {
+        // 修复正则表达式避免指数级回溯
+        const problemRegex = /(\d+)?\s*[:：]\s*(?:\[(error|warning|info)\]\s*)?([^\n]+)/g
+        let match = problemRegex.exec(content)
+
+        // 使用while循环而非赋值条件
+        while (match !== null) {
+          const line = match[1] ? Number.parseInt(match[1], 10) : undefined
+          const severity = (match[2] || 'info') as 'info' | 'warning' | 'error'
+          const message = match[3].trim()
+
+          issues.push({
+            line,
+            severity,
+            message,
+          })
+
+          // 在循环体末尾执行下一次匹配
+          match = problemRegex.exec(content)
+        }
       }
 
       // 如果没有找到问题，并且内容不为空，添加一个通用问题
@@ -401,7 +473,7 @@ ${detailedResults}
       return {
         file: filePath,
         issues,
-        summary: this.extractSummary(content),
+        summary,
       }
     }
     catch (error) {
@@ -426,11 +498,22 @@ ${detailedResults}
    * 提取总结
    */
   private extractSummary(content: string): string {
-    // 修复正则表达式避免指数级回溯
-    const summaryMatch = content.match(/(?:总结|总体评价|Summary)[:：]\s*([^\n]+)(?:\n\n|$)/i)
+    // 尝试提取"总体评价"部分
+    const overallMatch = content.match(/##\s*📝\s*总体评价\s*\n([^#]+)/)
+    if (overallMatch && overallMatch[1]) {
+      return overallMatch[1].trim()
+    }
 
+    // 尝试匹配其他可能的总结格式
+    const summaryMatch = content.match(/(?:总结|总体评价|总体评估|总览|Summary)[:：]\s*([^\n]+)(?:\n\n|$)/i)
     if (summaryMatch && summaryMatch[1]) {
       return summaryMatch[1].trim()
+    }
+
+    // 尝试提取第一段作为总结
+    const firstParagraph = content.split('\n\n')[0]
+    if (firstParagraph && firstParagraph.length < 200) {
+      return firstParagraph.trim()
     }
 
     // 如果没有明确的总结部分，取最后一段

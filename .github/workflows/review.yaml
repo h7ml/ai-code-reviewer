@@ -1,0 +1,208 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.2
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Setup and validate
+        id: setup
+        continue-on-error: true
+        run: |
+          echo "开始设置和验证..."
+
+          # 初始化错误收集
+          ERRORS=()
+
+          # 生成配置文件
+          echo "正在生成配置文件..."
+          if ! .github/generate-config.sh --output .aireviewrc.yml; then
+            echo "::error::配置文件生成失败"
+            ERRORS+=("配置文件生成失败")
+          else
+            echo "配置文件生成成功"
+          fi
+
+          # 验证配置文件
+          echo "验证配置文件..."
+          if [ ! -f ".aireviewrc.yml" ]; then
+            echo "::error::配置文件不存在"
+            ERRORS+=("配置文件不存在")
+          else
+            file_size=$(stat -c%s ".aireviewrc.yml" 2>/dev/null || stat -f%z ".aireviewrc.yml")
+            echo "配置文件大小: $file_size 字节"
+            if [ "$file_size" -lt 10 ]; then
+              echo "::error::配置文件为空"
+              ERRORS+=("配置文件为空")
+            fi
+          fi
+
+          # 验证API密钥
+          echo "验证API密钥..."
+          if [ -z "$API_KEY" ]; then
+            echo "::error::API密钥未设置"
+            ERRORS+=("API密钥未设置")
+          elif [[ ! "$API_KEY" =~ ^(sk-|sk-or-) ]]; then
+            echo "::error::API密钥格式无效"
+            ERRORS+=("API密钥格式无效")
+          else
+            echo "API密钥验证成功"
+          fi
+
+          # 验证GitHub Token
+          echo "验证GitHub Token..."
+          if [ -z "$AI_REVIEWER_GITHUB_TOKEN" ]; then
+            echo "::error::GitHub Token未设置"
+            ERRORS+=("GitHub Token未设置")
+          else
+            # 测试API连接
+            response=$(curl -s -w "%{http_code}" -H "Authorization: token $AI_REVIEWER_GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "User-Agent: AI-Code-Reviewer" \
+              https://api.github.com/user)
+            status_code=${response: -3}
+            body=${response:0:${#response}-3}
+
+            if [ "$status_code" = "200" ]; then
+              echo "GitHub Token验证成功"
+              # 检查token权限
+              scopes=$(curl -s -H "Authorization: token $AI_REVIEWER_GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                -H "User-Agent: AI-Code-Reviewer" \
+                https://api.github.com/user | jq -r '.scopes[]' 2>/dev/null || echo "")
+
+              required_scopes=("repo" "issues")
+              missing_scopes=()
+
+              for scope in "${required_scopes[@]}"; do
+                if [[ ! "$scopes" =~ "$scope" ]]; then
+                  missing_scopes+=("$scope")
+                fi
+              done
+
+              if [ ${#missing_scopes[@]} -gt 0 ]; then
+                echo "::error::GitHub Token缺少必要权限: ${missing_scopes[*]}"
+                echo "请确保token具有以下权限："
+                echo "- repo (完整仓库访问)"
+                echo "- issues (Issue访问)"
+                ERRORS+=("GitHub Token缺少必要权限: ${missing_scopes[*]}")
+              else
+                echo "GitHub Token权限验证成功"
+              fi
+            else
+              echo "::error::GitHub Token验证失败"
+              echo "状态码: $status_code"
+              echo "响应: $body"
+              ERRORS+=("GitHub Token验证失败: $status_code $body")
+            fi
+          fi
+
+          # 获取PR信息
+          echo "获取PR信息..."
+          PR_NUMBER=${{ github.event.pull_request.number || inputs.pr_number }}
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::error::无法获取PR编号"
+            ERRORS+=("无法获取PR编号")
+          else
+            echo "PR编号: $PR_NUMBER"
+            # 验证PR是否存在
+            response=$(curl -s -w "%{http_code}" -H "Authorization: token $AI_REVIEWER_GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "User-Agent: AI-Code-Reviewer" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")
+            status_code=${response: -3}
+            body=${response:0:${#response}-3}
+
+            if [ "$status_code" = "200" ]; then
+              echo "PR验证成功"
+              echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+            else
+              echo "::error::PR #$PR_NUMBER 不存在或无法访问"
+              echo "状态码: $status_code"
+              echo "响应: $body"
+              ERRORS+=("PR #$PR_NUMBER 不存在或无法访问: $status_code $body")
+            fi
+          fi
+
+          # 设置验证状态
+          if [ ${#ERRORS[@]} -eq 0 ]; then
+            echo "所有验证通过"
+            echo "setup_valid=true" >> $GITHUB_OUTPUT
+          else
+            echo "发现 ${#ERRORS[@]} 个错误"
+            echo "setup_valid=false" >> $GITHUB_OUTPUT
+            # 将错误信息转换为单行字符串
+            echo "errors=$(printf '%s\n' "${ERRORS[@]}" | tr '\n' '|')" >> $GITHUB_OUTPUT
+          fi
+        env:
+          API_KEY: ${{ secrets.AI_REVIEWER_OPENAI_KEY }}
+          AI_REVIEWER_OPENAI_KEY: ${{ secrets.AI_REVIEWER_OPENAI_KEY }}
+          AI_REVIEWER_GITHUB_TOKEN: ${{ secrets.AI_REVIEWER_GITHUB_TOKEN }}
+          AI_REVIEWER_MODEL: ${{ secrets.AI_REVIEWER_MODEL || 'gpt-3.5-turbo' }}
+          AI_REVIEWER_BASE_URL: ${{ secrets.AI_REVIEWER_BASE_URL || 'https://api.openai.com/v1' }}
+          AI_REVIEWER_PROMPT_SYSTEM: ${{ secrets.AI_REVIEWER_PROMPT_SYSTEM }}
+          AI_REVIEWER_PROMPT_REVIEW: ${{ secrets.AI_REVIEWER_PROMPT_REVIEW }}
+          AI_REVIEWER_PROMPT_SUMMARY: ${{ secrets.AI_REVIEWER_PROMPT_SUMMARY }}
+
+      - name: Run AI code review
+        if: steps.setup.outputs.setup_valid == 'true'
+        continue-on-error: true
+        run: |
+          echo "开始代码审查..."
+          echo "PR编号: ${{ steps.setup.outputs.pr_number }}"
+          echo "仓库: $GITHUB_REPOSITORY"
+
+          pnpm tsx src/cli.ts github-pr \
+            --owner ${{ github.repository_owner }} \
+            --repo ${{ github.event.repository.name }} \
+            --pr-id ${{ steps.setup.outputs.pr_number }}
+        env:
+          AI_REVIEWER_OPENAI_KEY: ${{ secrets.AI_REVIEWER_OPENAI_KEY }}
+          AI_REVIEWER_MODEL: ${{ secrets.AI_REVIEWER_MODEL || 'gpt-3.5-turbo' }}
+          AI_REVIEWER_BASE_URL: ${{ secrets.AI_REVIEWER_BASE_URL || 'https://api.openai.com/v1' }}
+          AI_REVIEWER_GITHUB_TOKEN: ${{ secrets.AI_REVIEWER_GITHUB_TOKEN }}

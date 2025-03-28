@@ -28,6 +28,13 @@ export class GitHubPlatform implements Platform {
     this.owner = options.owner
     this.repo = options.repo
     this.prId = options.prId
+
+    // 验证token格式（支持 GitHub Actions 的 GITHUB_TOKEN）
+    if (!this.token.match(/^(ghp|gho|ghu|ghs|ghr)_\w{36}$/) && !this.token.match(/^ghs_\w{36}$/)) {
+      consola.warn('GitHub Token 格式不符合标准格式，但将继续使用')
+    }
+
+    consola.info(`初始化GitHub平台: owner=${this.owner}, repo=${this.repo}, prId=${this.prId}`)
   }
 
   /**
@@ -37,23 +44,44 @@ export class GitHubPlatform implements Platform {
     try {
       consola.debug(`获取GitHub仓库 ${this.owner}/${this.repo} PR #${this.prId} 的变更`)
 
-      // 获取PR的文件列表
-      const filesResponse = await fetch(
-        `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}/files`,
-        {
-          headers: {
-            Authorization: `token ${this.token}`,
-            Accept: 'application/vnd.github.v3+json',
-          },
+      // 首先验证PR是否存在
+      const prUrl = `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}`
+      consola.debug(`检查PR是否存在: ${prUrl}`)
+
+      const prResponse = await fetch(prUrl, {
+        headers: {
+          'Authorization': `token ${this.token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'AI-Code-Reviewer',
         },
-      )
+      })
+
+      if (!prResponse.ok) {
+        const errorText = await prResponse.text()
+        consola.error(`PR检查失败: ${prResponse.status} ${errorText}`)
+        throw new Error(`PR不存在或无法访问: ${prResponse.status} ${errorText}`)
+      }
+
+      // 获取PR的文件列表
+      const filesUrl = `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}/files`
+      consola.debug(`获取PR文件列表: ${filesUrl}`)
+
+      const filesResponse = await fetch(filesUrl, {
+        headers: {
+          'Authorization': `token ${this.token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'AI-Code-Reviewer',
+        },
+      })
 
       if (!filesResponse.ok) {
         const errorText = await filesResponse.text()
+        consola.error(`获取PR文件列表失败: ${filesResponse.status} ${errorText}`)
         throw new Error(`GitHub API请求失败: ${filesResponse.status} ${errorText}`)
       }
 
       const files = await filesResponse.json() as any[]
+      consola.debug(`找到 ${files.length} 个变更文件`)
 
       const diffs: CodeDiff[] = []
 
@@ -61,6 +89,8 @@ export class GitHubPlatform implements Platform {
         if (file.filename) {
           const oldPath = file.previous_filename || file.filename
           const newPath = file.filename
+
+          consola.debug(`处理文件: ${newPath}`)
 
           // 获取文件内容
           const [oldContent, newContent] = await Promise.all([
@@ -97,8 +127,9 @@ export class GitHubPlatform implements Platform {
         `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}`,
         {
           headers: {
-            Authorization: `token ${this.token}`,
-            Accept: 'application/vnd.github.v3+json',
+            'Authorization': `token ${this.token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'AI-Code-Reviewer',
           },
         },
       )
@@ -122,6 +153,7 @@ export class GitHubPlatform implements Platform {
               'Authorization': `token ${this.token}`,
               'Accept': 'application/vnd.github.v3+json',
               'Content-Type': 'application/json',
+              'User-Agent': 'AI-Code-Reviewer',
             },
             body: JSON.stringify({
               commit_id: commitId,
@@ -168,6 +200,7 @@ export class GitHubPlatform implements Platform {
             'Authorization': `token ${this.token}`,
             'Accept': 'application/vnd.github.v3+json',
             'Content-Type': 'application/json',
+            'User-Agent': 'AI-Code-Reviewer',
           },
           body: JSON.stringify({
             body: `## AI代码审查总结\n\n${summary}`,
@@ -195,8 +228,9 @@ export class GitHubPlatform implements Platform {
     try {
       const response = await fetch(contentsUrl, {
         headers: {
-          Authorization: `token ${this.token}`,
-          Accept: 'application/vnd.github.v3.raw',
+          'Authorization': `token ${this.token}`,
+          'Accept': 'application/vnd.github.v3.raw',
+          'User-Agent': 'AI-Code-Reviewer',
         },
       })
 
@@ -236,8 +270,9 @@ export class GitHubPlatform implements Platform {
         `${this.baseUrl}/repos/${this.owner}/${this.repo}/pulls/${this.prId}`,
         {
           headers: {
-            Authorization: `token ${this.token}`,
-            Accept: 'application/vnd.github.v3+json',
+            'Authorization': `token ${this.token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'AI-Code-Reviewer',
           },
         },
       )
@@ -277,6 +312,7 @@ export class GitHubPlatform implements Platform {
               'Authorization': `token ${this.token}`,
               'Accept': 'application/vnd.github.v3+json',
               'Content-Type': 'application/json',
+              'User-Agent': 'AI-Code-Reviewer',
             },
             body: JSON.stringify({
               commit_id: commitId,

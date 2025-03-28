@@ -178,6 +178,85 @@ ai-review github-pr --owner user --repo project --pr-id 123
 ai-review local --path ./src
 ```
 
+### GitHub Actions集成
+
+本项目支持通过GitHub Actions自动审查PR代码。将以下内容添加到你的仓库中：
+
+1. 在仓库的Settings > Secrets and variables > Actions中设置以下secrets：
+
+   - `AI_REVIEWER_OPENAI_KEY`: (必需) OpenAI/OpenRouter API密钥
+   - `AI_REVIEWER_MODEL`: (可选) 使用的AI模型, 默认: `gpt-3.5-turbo`
+   - `AI_REVIEWER_BASE_URL`: (可选) API基础URL, 默认: `https://api.openai.com/v1`
+   - `AI_REVIEWER_PROMPT_SYSTEM`: (可选) 自定义系统提示词
+   - `AI_REVIEWER_PROMPT_REVIEW`: (可选) 自定义审查提示词
+   - `AI_REVIEWER_PROMPT_SUMMARY`: (可选) 自定义总结提示词
+   - `WECOM_ENABLED`: (可选) 企业微信通知开关, 值: `true`/`false`
+   - `WECOM_WEBHOOK`: (可选) 企业微信Webhook地址
+
+2. 创建`.github/workflows/review.yaml`文件：
+
+```yaml
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run AI code review
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number || inputs.pr_number }}
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No pull request number provided"
+            exit 1
+          fi
+
+          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+
+          pnpm tsx src/cli.ts github-pr \
+            --owner ${{ github.repository_owner }} \
+            --repo $REPO_NAME \
+            --pr-id $PR_NUMBER
+        env:
+          AI_REVIEWER_OPENAI_KEY: ${{ secrets.AI_REVIEWER_OPENAI_KEY }}
+          AI_REVIEWER_MODEL: ${{ secrets.AI_REVIEWER_MODEL }}
+          AI_REVIEWER_BASE_URL: ${{ secrets.AI_REVIEWER_BASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+这样设置后，当有PR创建或更新时会自动进行代码审查，也可以通过GitHub Actions界面手动触发审查。
+
 ## 许可证
 
 [MIT](./LICENSE) License

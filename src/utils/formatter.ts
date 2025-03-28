@@ -191,78 +191,99 @@ export class OutputFormatter {
    * 当用户要求查看单个文件的详细评论时使用
    */
   static formatSingleFileReview(result: ReviewResult): string {
-    let output = '\n'
-    output += this.formatHeader(`文件: ${result.file} 审查结果`)
-    output += '\n\n'
+    const { file, issues, summary } = result
 
-    // 按严重程度分组
-    const errorIssues = result.issues.filter(issue => issue.severity === 'error')
-    const warningIssues = result.issues.filter(issue => issue.severity === 'warning')
-    const infoIssues = result.issues.filter(issue => issue.severity === 'info')
+    // 按严重程度对问题进行排序和分组
+    const errorIssues = issues.filter(issue => issue.severity === 'error')
+    const warningIssues = issues.filter(issue => issue.severity === 'warning')
+    const infoIssues = issues.filter(issue => issue.severity === 'info')
 
-    if (result.issues.length === 0) {
-      output += chalk.green('  ✓ 没有发现问题\n')
-      output += this.formatDivider()
-      return output
+    // 生成Markdown格式的输出
+    let output = `# 代码审查报告: ${file}\n\n`
+
+    // 添加总结
+    if (summary) {
+      output += `## 📝 总体评价\n\n${summary}\n\n`
     }
 
-    // 问题统计
-    output += `${chalk.red(`错误: ${errorIssues.length}个`)} | ${chalk.yellow(`警告: ${warningIssues.length}个`)} | ${chalk.blue(`提示: ${infoIssues.length}个`)}\n\n`
+    // 添加问题统计
+    output += `## 📊 问题概览\n\n`
+    output += `- 🔴 严重问题: ${errorIssues.length}个\n`
+    output += `- 🟠 警告: ${warningIssues.length}个\n`
+    output += `- 🔵 建议: ${infoIssues.length}个\n`
+    output += `- 💡 总计: ${issues.length}个问题\n\n`
 
-    // 文件摘要
-    if (result.summary) {
-      output += `${chalk.bold('摘要: ') + result.summary.replace(/\n/g, '\n  ')}\n\n`
-    }
+    // 添加关键发现
+    if (errorIssues.length > 0 || warningIssues.length > 0) {
+      output += `## ⚠️ 关键发现\n\n`
 
-    if (result.issues.length > 0) {
-      output += `${chalk.bold('详细问题:')}\n\n`
-
-      // 按行号排序问题
-      const sortedIssues = [...result.issues].sort((a, b) => {
-        // 无行号的问题排在最前面
-        if (!a.line)
-          return -1
-        if (!b.line)
-          return 1
-        return (a.line || 0) - (b.line || 0)
+      // 只列出严重问题和警告作为关键发现
+      const keyIssues = [...errorIssues, ...warningIssues].slice(0, 5) // 最多显示5个关键问题
+      keyIssues.forEach((issue, index) => {
+        const icon = issue.severity === 'error' ? '🔴' : '🟠'
+        const location = issue.line ? `第${issue.line}行` : '整体'
+        output += `${index + 1}. ${icon} **${location}**: ${issue.message}\n`
       })
 
-      // 输出排序后的问题
-      for (const issue of sortedIssues) {
-        const lineInfo = issue.line ? `第${issue.line}行` : '文件级问题'
-        const severityColor
-          = issue.severity === 'error'
-            ? chalk.red
-            : issue.severity === 'warning'
-              ? chalk.yellow
-              : chalk.blue
-        const severitySymbol
-          = issue.severity === 'error'
-            ? '❌'
-            : issue.severity === 'warning'
-              ? '⚠️'
-              : 'ℹ️'
+      if (errorIssues.length + warningIssues.length > 5) {
+        output += `_...以及${errorIssues.length + warningIssues.length - 5}个其他问题_\n`
+      }
+      output += '\n'
+    }
 
-        output += `${severitySymbol} ${severityColor(`[${lineInfo}]`)} ${issue.message}\n`
+    // 添加详细问题列表
+    if (issues.length > 0) {
+      output += `## 🔍 详细分析\n\n`
 
-        if (issue.suggestion) {
-          output += `  ${chalk.green('✓')} ${chalk.italic('建议:')} ${issue.suggestion}\n`
-        }
+      // 首先显示严重问题
+      if (errorIssues.length > 0) {
+        output += `### 🔴 严重问题\n\n`
+        errorIssues.forEach((issue) => {
+          output += this.formatIssue(issue)
+        })
+      }
 
-        if (issue.code) {
-          output += `  ${chalk.dim('示例代码:')}\n`
-          const codeLines = issue.code.split('\n')
-          for (const line of codeLines) {
-            output += `  ${chalk.dim('|')} ${line}\n`
-          }
-        }
+      // 然后显示警告
+      if (warningIssues.length > 0) {
+        output += `### 🟠 警告\n\n`
+        warningIssues.forEach((issue) => {
+          output += this.formatIssue(issue)
+        })
+      }
 
-        output += '\n'
+      // 最后显示信息性问题
+      if (infoIssues.length > 0) {
+        output += `### 🔵 建议\n\n`
+        infoIssues.forEach((issue) => {
+          output += this.formatIssue(issue)
+        })
       }
     }
 
-    output += this.formatFooter('文件审查结束')
-    output += '\n'
+    // 最佳实践和资源部分
+    output += `## 📚 最佳实践参考\n\n`
+    output += `- 代码应当清晰、简洁且易于维护\n`
+    output += `- 遵循语言特定的编码规范\n`
+    output += `- 添加适当的注释和文档\n`
+    output += `- 编写单元测试以验证功能\n\n`
+
+    return output
+  }
+
+  /**
+   * 格式化单个问题
+   */
+  private static formatIssue(issue: ReviewResult['issues'][0]): string {
+    const location = issue.line ? `第${issue.line}行` : '整体'
+    let output = `#### ${location}: ${issue.message}\n\n`
+
+    if (issue.suggestion) {
+      output += `**💡 改进建议:**\n${issue.suggestion}\n\n`
+    }
+
+    if (issue.code) {
+      output += `**📝 示例代码:**\n\`\`\`\n${issue.code}\n\`\`\`\n\n`
+    }
 
     return output
   }

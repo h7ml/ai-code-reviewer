@@ -1,0 +1,93 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.2
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Setup and validate
+        id: setup
+        continue-on-error: true
+        run: |
+          chmod +x .github/validate.sh
+          .github/validate.sh
+        env:
+          # GitHub Actions 内置环境变量
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_OUTPUT: ${{ github.output }}
+
+          # 自定义环境变量
+          API_KEY: ${{ secrets.AI_REVIEWER_OPENAI_KEY }}
+          AI_REVIEWER_OPENAI_KEY: ${{ secrets.AI_REVIEWER_OPENAI_KEY }}
+          AI_REVIEWER_GITHUB_TOKEN: ${{ secrets.AI_REVIEWER_GITHUB_TOKEN }}
+          AI_REVIEWER_MODEL: ${{ secrets.AI_REVIEWER_MODEL || 'deepseek/deepseek-chat-v3-0324:free' }}
+          AI_REVIEWER_BASE_URL: ${{ secrets.AI_REVIEWER_BASE_URL || 'https://openrouter.ai' }}
+          AI_REVIEWER_PROMPT_SYSTEM: ${{ secrets.AI_REVIEWER_PROMPT_SYSTEM }}
+          AI_REVIEWER_PROMPT_REVIEW: ${{ secrets.AI_REVIEWER_PROMPT_REVIEW }}
+          AI_REVIEWER_PROMPT_SUMMARY: ${{ secrets.AI_REVIEWER_PROMPT_SUMMARY }}
+
+      - name: Run AI code review
+        if: steps.setup.outputs.setup_valid == 'true'
+        continue-on-error: true
+        run: |
+          echo "开始代码审查..."
+          echo "PR编号: ${{ steps.setup.outputs.pr_number }}"
+          echo "仓库: $GITHUB_REPOSITORY"
+
+          pnpm tsx src/cli.ts github-pr \
+            --owner ${{ github.repository_owner }} \
+            --repo ${{ github.event.repository.name }} \
+            --pr-id ${{ steps.setup.outputs.pr_number }}
+        env:
+          AI_REVIEWER_OPENAI_KEY: ${{ secrets.AI_REVIEWER_OPENAI_KEY }}
+          AI_REVIEWER_MODEL: ${{ secrets.AI_REVIEWER_MODEL || 'deepseek/deepseek-chat-v3-0324:free' }}
+          AI_REVIEWER_BASE_URL: ${{ secrets.AI_REVIEWER_BASE_URL || 'https://openrouter.ai' }}
+          AI_REVIEWER_GITHUB_TOKEN: ${{ secrets.AI_REVIEWER_GITHUB_TOKEN }}

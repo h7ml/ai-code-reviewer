@@ -93,7 +93,7 @@ function loadEnvConfig(): Partial<AiReviewerConfig> {
   const config: Partial<AiReviewerConfig> = {
     ai: {
       provider: (process.env.AI_REVIEWER_PROVIDER as 'openai' | 'ollama') || undefined,
-      model: process.env.AI_REVIEWER_MODEL || undefined,
+      model: process.env.AI_REVIEWER_MODEL || 'deepseek-r1:1.5b',
       apiKey: process.env.AI_REVIEWER_OPENAI_KEY,
       baseUrl: process.env.AI_REVIEWER_BASE_URL,
       temperature: process.env.AI_REVIEWER_TEMPERATURE

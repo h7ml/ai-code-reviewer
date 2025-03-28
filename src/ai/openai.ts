@@ -1,6 +1,7 @@
 import { consola } from 'consola'
 import { OpenAI } from 'openai'
 import type { CodeDiff, ReviewResult } from '../core/reviewer'
+import { detectLanguage, getDisplayLanguage } from '../utils/language'
 import type { AiProvider, AiProviderConfig } from './types'
 
 /**
@@ -15,11 +16,44 @@ export class OpenAIProvider implements AiProvider {
       throw new Error('OpenAI API密钥未提供')
     }
 
+    // 记录传入的配置
+    consola.info(`OpenAI/OpenRouter初始配置: provider=${config.provider}, model=${config.model}, baseUrl=${config.baseUrl || '默认'}`)
+
     this.config = config
-    this.client = new OpenAI({
+
+    // 检查是否使用OpenRouter
+    const isOpenRouter = config.baseUrl?.includes('openrouter.ai')
+
+    const clientOptions: any = {
       apiKey: config.apiKey,
       baseURL: config.baseUrl,
-    })
+    }
+
+    // 为OpenRouter添加必要的请求头
+    if (isOpenRouter) {
+      consola.info('检测到使用OpenRouter API，添加相应配置')
+      clientOptions.defaultHeaders = {
+        'HTTP-Referer': 'https://github.com/h7ml/ai-code-reviewer',
+        'X-Title': 'AI Code Reviewer',
+      }
+
+      // 确保API路径正确
+      if (!clientOptions.baseURL.endsWith('/api/v1')) {
+        clientOptions.baseURL = `${clientOptions.baseURL.replace(/\/$/, '')}/api/v1`
+        consola.info(`OpenRouter API URL已调整为: ${clientOptions.baseURL}`)
+      }
+
+      // 移除模型名称格式调整逻辑，由用户完全控制模型格式
+    }
+
+    consola.debug(`OpenAI/OpenRouter客户端初始化配置: ${JSON.stringify({
+      baseURL: clientOptions.baseURL,
+      hasApiKey: !!clientOptions.apiKey,
+      model: clientOptions.model || this.config.model,
+      hasDefaultHeaders: !!clientOptions.defaultHeaders,
+    })}`)
+
+    this.client = new OpenAI(clientOptions)
   }
 
   /**
@@ -32,34 +66,76 @@ export class OpenAIProvider implements AiProvider {
 
       consola.debug(`使用OpenAI审查文件: ${diff.newPath}`)
 
-      const response = await this.client.chat.completions.create({
-        model: this.config.model,
-        temperature: this.config.temperature || 0.1,
-        max_tokens: this.config.maxTokens,
-        messages: [
-          {
-            role: 'system',
-            content: `你是一个专业的代码审查助手，擅长识别代码中的问题并提供改进建议。
+      const systemPrompt = this.config.review?.prompts?.system || `你是一个专业的代码审查助手，擅长识别代码中的问题并提供改进建议。
 请按照以下格式提供反馈:
 1. 分析代码差异
 2. 列出具体问题
 3. 对每个问题提供改进建议
-4. 提供总结`,
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      })
+4. 提供总结`
 
-      const content = response.choices[0]?.message.content
+      try {
+        const response = await this.client.chat.completions.create({
+          model: this.config.model,
+          temperature: this.config.temperature || 0.1,
+          max_tokens: this.config.maxTokens || 4000,
+          top_p: 1,
+          frequency_penalty: 0,
+          presence_penalty: 0,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt,
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+        })
 
-      if (!content) {
-        throw new Error('OpenAI响应内容为空')
+        consola.debug(`API响应: ${JSON.stringify({
+          id: response.id,
+          model: response.model,
+          object: response.object,
+          created: response.created,
+          choices_length: response.choices?.length || 0,
+          has_choices: !!response.choices && response.choices.length > 0,
+        }, null, 2)}`)
+
+        if (!response.choices || response.choices.length === 0) {
+          consola.error('API响应中choices数组为空或不存在')
+          throw new Error('API响应返回的choices为空')
+        }
+
+        if (!response.choices[0]) {
+          consola.error('API响应中choices[0]为空')
+          throw new Error('API响应返回的第一个选择为空')
+        }
+
+        if (!response.choices[0].message) {
+          consola.error('API响应中choices[0].message为空')
+          throw new Error('API响应返回的消息对象为空')
+        }
+
+        const content = response.choices[0].message.content
+
+        if (!content) {
+          throw new Error('API响应内容为空')
+        }
+
+        return this.parseReviewResponse(content, diff.newPath)
       }
-
-      return this.parseReviewResponse(content, diff.newPath)
+      catch (error: any) {
+        consola.error(`调用API时出错: ${error.message}`)
+        if (error.response) {
+          consola.error(`API错误响应: ${JSON.stringify({
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+          })}`)
+        }
+        throw error
+      }
     }
     catch (error) {
       consola.error(`OpenAI审查代码时出错:`, error)
@@ -74,34 +150,81 @@ export class OpenAIProvider implements AiProvider {
     try {
       const prompt = this.buildSummaryPrompt(results)
 
-      consola.debug('使用OpenAI生成审查总结')
+      consola.debug('使用API生成审查总结')
 
-      const response = await this.client.chat.completions.create({
-        model: this.config.model,
-        temperature: this.config.temperature || 0.1,
-        max_tokens: this.config.maxTokens,
-        messages: [
-          {
-            role: 'system',
-            content: `你是一个专业的代码审查助手，擅长总结代码审查结果并提供改进建议。`,
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      })
+      const systemPrompt = this.config.review?.prompts?.system || `你是一个专业的代码审查助手，擅长总结代码审查结果并提供改进建议。
+请按照以下格式提供完整的审查报告:
+1. 总体概述 - 代码库整体质量评估
+2. 按文件列出详细问题 - 每个文件的具体问题及建议
+3. 通用改进建议 - 适用于整个代码库的改进建议
+4. 优先修复项 - 需要优先处理的问题`
 
-      const content = response.choices[0]?.message.content
+      try {
+        const response = await this.client.chat.completions.create({
+          model: this.config.model,
+          temperature: this.config.temperature || 0.1,
+          max_tokens: this.config.maxTokens || 4000,
+          top_p: 1,
+          frequency_penalty: 0,
+          presence_penalty: 0,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt,
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+        })
 
-      if (!content) {
-        throw new Error('OpenAI响应内容为空')
+        consola.debug(`API总结响应: ${JSON.stringify({
+          id: response.id,
+          model: response.model,
+          object: response.object,
+          created: response.created,
+          choices_length: response.choices?.length || 0,
+          has_choices: !!response.choices && response.choices.length > 0,
+        }, null, 2)}`)
+
+        if (!response.choices || response.choices.length === 0) {
+          consola.error('API总结响应中choices数组为空或不存在')
+          throw new Error('API响应返回的choices为空')
+        }
+
+        if (!response.choices[0]) {
+          consola.error('API总结响应中choices[0]为空')
+          throw new Error('API响应返回的第一个选择为空')
+        }
+
+        if (!response.choices[0].message) {
+          consola.error('API总结响应中choices[0].message为空')
+          throw new Error('API响应返回的消息对象为空')
+        }
+
+        const content = response.choices[0].message.content
+
+        if (!content) {
+          throw new Error('API响应内容为空')
+        }
+
+        return content
       }
-
-      return content
+      catch (error: any) {
+        consola.error(`调用API生成总结时出错: ${error.message}`)
+        if (error.response) {
+          consola.error(`API错误响应: ${JSON.stringify({
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+          })}`)
+        }
+        throw error
+      }
     }
     catch (error) {
-      consola.error(`OpenAI生成总结时出错:`, error)
+      consola.error(`生成总结时出错:`, error)
       throw error
     }
   }
@@ -110,6 +233,16 @@ export class OpenAIProvider implements AiProvider {
    * 构建代码审查提示
    */
   private buildReviewPrompt(diff: CodeDiff, language: string): string {
+    const customPrompt = this.config.review?.prompts?.review
+
+    if (customPrompt) {
+      // 替换自定义提示中的占位符
+      return customPrompt
+        .replace('{{language}}', language)
+        .replace('{{filePath}}', diff.newPath)
+        .replace('{{diffContent}}', diff.diffContent)
+    }
+
     return `请审查以下${language}代码差异，并提供改进建议:
 
 文件路径: ${diff.newPath}
@@ -137,24 +270,70 @@ ${diff.diffContent}
     const filesCount = results.length
     const issuesCount = results.reduce((sum, result) => sum + result.issues.length, 0)
 
-    const resultsSummary = results.map((result) => {
-      return `文件: ${result.file}
-问题数: ${result.issues.length}
-问题摘要: ${result.issues.map(issue => `- [${issue.severity}] ${issue.message}`).join('\n')}`
+    // 为每个文件创建详细报告
+    const detailedResults = results.map((result) => {
+      const issuesByCategory = {
+        error: result.issues.filter(issue => issue.severity === 'error'),
+        warning: result.issues.filter(issue => issue.severity === 'warning'),
+        info: result.issues.filter(issue => issue.severity === 'info'),
+      }
+
+      const errorCount = issuesByCategory.error.length
+      const warningCount = issuesByCategory.warning.length
+      const infoCount = issuesByCategory.info.length
+
+      const severitySummary = `严重问题: ${errorCount}个, 警告: ${warningCount}个, 信息: ${infoCount}个`
+
+      return `## 文件: ${result.file}
+${severitySummary}
+${result.summary ? `\n文件摘要: ${result.summary}\n` : ''}
+
+详细问题:
+${result.issues.map((issue) => {
+  const lineInfo = issue.line ? `第${issue.line}行` : '通用'
+  const suggestion = issue.suggestion ? `\n建议: ${issue.suggestion}` : ''
+  return `- [${issue.severity.toUpperCase()}] ${lineInfo}: ${issue.message}${suggestion}`
+}).join('\n')}
+`
     }).join('\n\n')
 
-    return `请总结以下代码审查结果，并提供整体改进建议:
+    // 统计问题类型分布
+    const allIssues = results.flatMap(r => r.issues)
+    const errorCount = allIssues.filter(i => i.severity === 'error').length
+    const warningCount = allIssues.filter(i => i.severity === 'warning').length
+    const infoCount = allIssues.filter(i => i.severity === 'info').length
+
+    const severityDistribution = `严重问题: ${errorCount}个 (${Math.round(errorCount / issuesCount * 100 || 0)}%)
+警告: ${warningCount}个 (${Math.round(warningCount / issuesCount * 100 || 0)}%)
+信息: ${infoCount}个 (${Math.round(infoCount / issuesCount * 100 || 0)}%)`
+
+    const customPrompt = this.config.review?.prompts?.summary
+
+    if (customPrompt) {
+      // 替换自定义提示中的占位符
+      return customPrompt
+        .replace('{{filesCount}}', String(filesCount))
+        .replace('{{issuesCount}}', String(issuesCount))
+        .replace('{{resultsSummary}}', detailedResults)
+        .replace('{{severityDistribution}}', severityDistribution)
+    }
+
+    return `请对以下代码审查结果进行全面总结，并提供详细的整体改进建议:
 
 审查了 ${filesCount} 个文件，共发现 ${issuesCount} 个问题。
 
-审查结果摘要:
-${resultsSummary}
+问题严重程度分布:
+${severityDistribution}
 
-请提供:
+详细审查结果:
+${detailedResults}
+
+请基于以上结果提供:
 1. 代码库整体质量评估
-2. 最常见的问题类型
-3. 整体改进建议
-4. 优先修复的关键问题`
+2. 按文件列出关键问题及建议
+3. 最常见的问题类型及改进方向
+4. 优先修复的关键问题
+5. 整体代码质量改进建议`
   }
 
   /**
@@ -263,39 +442,14 @@ ${resultsSummary}
    * 根据文件扩展名检测语言
    */
   private detectLanguage(filePath: string): string {
-    const ext = filePath.split('.').pop()?.toLowerCase() || ''
+    // 使用共享的语言映射工具
+    const lang = detectLanguage(filePath)
 
-    const languageMap: Record<string, string> = {
-      js: 'JavaScript',
-      ts: 'TypeScript',
-      jsx: 'React',
-      tsx: 'React TypeScript',
-      vue: 'Vue',
-      py: 'Python',
-      rb: 'Ruby',
-      go: 'Go',
-      java: 'Java',
-      php: 'PHP',
-      cs: 'C#',
-      cpp: 'C++',
-      c: 'C',
-      swift: 'Swift',
-      kt: 'Kotlin',
-      rs: 'Rust',
-      dart: 'Dart',
-      sh: 'Shell',
-      yml: 'YAML',
-      yaml: 'YAML',
-      json: 'JSON',
-      md: 'Markdown',
-      html: 'HTML',
-      css: 'CSS',
-      scss: 'SCSS',
-      sass: 'Sass',
-      less: 'Less',
-      sql: 'SQL',
+    // 如果能识别语言，使用更友好的显示名称
+    if (lang) {
+      return getDisplayLanguage(lang)
     }
 
-    return languageMap[ext] || '未知'
+    return '未知'
   }
 }

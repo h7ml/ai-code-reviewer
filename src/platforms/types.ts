@@ -1,4 +1,4 @@
-import type { CodeDiff } from '../core/reviewer'
+import type { CodeDiff, ReviewResult } from '../core/reviewer'
 
 /**
  * 平台配置
@@ -40,4 +40,10 @@ export interface Platform {
    * 提交审查总结
    */
   submitReviewSummary: (summary: string) => Promise<void>
+
+  /**
+   * 批量提交审查评论
+   * @param results 所有文件的审查结果
+   */
+  submitBatchReviewComments?: (results: ReviewResult[]) => Promise<void>
 }

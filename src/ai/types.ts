@@ -10,6 +10,13 @@ export interface AiProviderConfig {
   baseUrl?: string
   temperature?: number
   maxTokens?: number
+  review?: {
+    prompts?: {
+      system?: string
+      review?: string
+      summary?: string
+    }
+  }
 }
 
 /**

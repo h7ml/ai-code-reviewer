@@ -1,5 +1,6 @@
 import { consola } from 'consola'
 import fetch from 'cross-fetch'
+import { detectLanguage, getDisplayLanguage } from '../utils/language'
 import type { CodeDiff, ReviewResult } from '../core/reviewer'
 import type { AiProvider, AiProviderConfig } from './types'
 
@@ -33,15 +34,60 @@ export class OllamaProvider implements AiProvider {
       const language = diff.language || this.detectLanguage(diff.newPath)
       const prompt = this.buildReviewPrompt(diff, language)
 
-      consola.debug(`使用Ollama审查文件: ${diff.newPath}`)
+      consola.debug(`使用Ollama审查文件: ${diff.newPath}, 模型: ${this.config.model}`)
 
-      const response = await this.generateCompletion(prompt)
+      const systemPrompt = this.config.review?.prompts?.system || `你是一个专业的代码审查助手，擅长识别代码中的问题并提供改进建议。
+请按照以下格式提供反馈:
+1. 分析代码差异
+2. 列出具体问题
+3. 对每个问题提供改进建议
+4. 提供总结`
 
-      if (!response) {
-        throw new Error('Ollama响应内容为空')
+      // Ollama API的新版本使用/api/chat，但不同模型对消息格式的支持不同
+      // 首先尝试使用旧的generate API，这对所有模型都有效
+      try {
+        // 创建包含系统提示和用户提示的完整提示
+        const fullPrompt = `${systemPrompt}\n\n${prompt}`
+        const content = await this.generateCompletion(fullPrompt)
+        return this.parseReviewResponse(content, diff.newPath)
       }
+      catch (error) {
+        consola.warn(`使用generate API失败，尝试使用chat API: ${error}`)
 
-      return this.parseReviewResponse(response, diff.newPath)
+        // 如果generate失败，尝试使用chat API
+        const response = await fetch(`${this.baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: this.config.model,
+            messages: [
+              {
+                role: 'system',
+                content: systemPrompt,
+              },
+              {
+                role: 'user',
+                content: prompt,
+              },
+            ],
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Ollama API请求失败: ${response.status} ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        const content = data.message?.content
+
+        if (!content) {
+          throw new Error('Ollama响应内容为空')
+        }
+
+        return this.parseReviewResponse(content, diff.newPath)
+      }
     }
     catch (error) {
       consola.error(`Ollama审查代码时出错:`, error)
@@ -55,10 +101,51 @@ export class OllamaProvider implements AiProvider {
   async generateSummary(results: ReviewResult[]): Promise<string> {
     try {
       const prompt = this.buildSummaryPrompt(results)
+      const systemPrompt = this.config.review?.prompts?.system || `你是一个专业的代码审查助手，擅长总结代码审查结果并提供改进建议。
+请按照以下格式提供完整的审查报告:
+1. 总体概述 - 代码库整体质量评估
+2. 按文件列出详细问题 - 每个文件的具体问题及建议
+3. 通用改进建议 - 适用于整个代码库的改进建议
+4. 优先修复项 - 需要优先处理的问题`
 
       consola.debug('使用Ollama生成审查总结')
 
-      return await this.generateCompletion(prompt)
+      // 首先尝试旧的generate API
+      try {
+        const fullPrompt = `${systemPrompt}\n\n${prompt}`
+        return await this.generateCompletion(fullPrompt)
+      }
+      catch (error) {
+        consola.warn(`使用generate API生成总结失败，尝试使用chat API: ${error}`)
+
+        // 如果失败，尝试使用chat API
+        const response = await fetch(`${this.baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: this.config.model,
+            messages: [
+              {
+                role: 'system',
+                content: systemPrompt,
+              },
+              {
+                role: 'user',
+                content: prompt,
+              },
+            ],
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Ollama API请求失败: ${response.status} ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        return data.message?.content || ''
+      }
     }
     catch (error) {
       consola.error(`Ollama生成总结时出错:`, error)
@@ -96,6 +183,16 @@ export class OllamaProvider implements AiProvider {
    * 构建代码审查提示
    */
   private buildReviewPrompt(diff: CodeDiff, language: string): string {
+    const customPrompt = this.config.review?.prompts?.review
+
+    if (customPrompt) {
+      // 替换自定义提示中的占位符
+      return customPrompt
+        .replace('{{language}}', language)
+        .replace('{{filePath}}', diff.newPath)
+        .replace('{{diffContent}}', diff.diffContent)
+    }
+
     return `请审查以下${language}代码差异，并提供改进建议:
 
 文件路径: ${diff.newPath}
@@ -113,7 +210,7 @@ ${diff.diffContent}
 5. 可读性和维护性改进
 6. 最佳实践建议
 
-请提供具体的问题位置、严重程度和改进建议。`
+请提供具体的问题位置、严重程度和改进建议。返回JSON格式的审查结果。`
   }
 
   /**
@@ -123,24 +220,70 @@ ${diff.diffContent}
     const filesCount = results.length
     const issuesCount = results.reduce((sum, result) => sum + result.issues.length, 0)
 
-    const resultsSummary = results.map((result) => {
-      return `文件: ${result.file}
-问题数: ${result.issues.length}
-问题摘要: ${result.issues.map(issue => `- [${issue.severity}] ${issue.message}`).join('\n')}`
+    // 为每个文件创建详细报告
+    const detailedResults = results.map((result) => {
+      const issuesByCategory = {
+        error: result.issues.filter(issue => issue.severity === 'error'),
+        warning: result.issues.filter(issue => issue.severity === 'warning'),
+        info: result.issues.filter(issue => issue.severity === 'info'),
+      }
+
+      const errorCount = issuesByCategory.error.length
+      const warningCount = issuesByCategory.warning.length
+      const infoCount = issuesByCategory.info.length
+
+      const severitySummary = `严重问题: ${errorCount}个, 警告: ${warningCount}个, 信息: ${infoCount}个`
+
+      return `## 文件: ${result.file}
+${severitySummary}
+${result.summary ? `\n文件摘要: ${result.summary}\n` : ''}
+
+详细问题:
+${result.issues.map((issue) => {
+  const lineInfo = issue.line ? `第${issue.line}行` : '通用'
+  const suggestion = issue.suggestion ? `\n建议: ${issue.suggestion}` : ''
+  return `- [${issue.severity.toUpperCase()}] ${lineInfo}: ${issue.message}${suggestion}`
+}).join('\n')}
+`
     }).join('\n\n')
 
-    return `请总结以下代码审查结果，并提供整体改进建议:
+    // 统计问题类型分布
+    const allIssues = results.flatMap(r => r.issues)
+    const errorCount = allIssues.filter(i => i.severity === 'error').length
+    const warningCount = allIssues.filter(i => i.severity === 'warning').length
+    const infoCount = allIssues.filter(i => i.severity === 'info').length
+
+    const severityDistribution = `严重问题: ${errorCount}个 (${Math.round(errorCount / issuesCount * 100 || 0)}%)
+警告: ${warningCount}个 (${Math.round(warningCount / issuesCount * 100 || 0)}%)
+信息: ${infoCount}个 (${Math.round(infoCount / issuesCount * 100 || 0)}%)`
+
+    const customPrompt = this.config.review?.prompts?.summary
+
+    if (customPrompt) {
+      // 替换自定义提示中的占位符
+      return customPrompt
+        .replace('{{filesCount}}', String(filesCount))
+        .replace('{{issuesCount}}', String(issuesCount))
+        .replace('{{resultsSummary}}', detailedResults)
+        .replace('{{severityDistribution}}', severityDistribution)
+    }
+
+    return `请对以下代码审查结果进行全面总结，并提供详细的整体改进建议:
 
 审查了 ${filesCount} 个文件，共发现 ${issuesCount} 个问题。
 
-审查结果摘要:
-${resultsSummary}
+问题严重程度分布:
+${severityDistribution}
 
-请提供:
+详细审查结果:
+${detailedResults}
+
+请基于以上结果提供:
 1. 代码库整体质量评估
-2. 最常见的问题类型
-3. 整体改进建议
-4. 优先修复的关键问题`
+2. 按文件列出关键问题及建议
+3. 最常见的问题类型及改进方向
+4. 优先修复的关键问题
+5. 整体代码质量改进建议`
   }
 
   /**
@@ -230,39 +373,14 @@ ${resultsSummary}
    * 根据文件扩展名检测语言
    */
   private detectLanguage(filePath: string): string {
-    const ext = filePath.split('.').pop()?.toLowerCase() || ''
+    // 使用共享的语言映射工具
+    const lang = detectLanguage(filePath)
 
-    const languageMap: Record<string, string> = {
-      js: 'JavaScript',
-      ts: 'TypeScript',
-      jsx: 'React',
-      tsx: 'React TypeScript',
-      vue: 'Vue',
-      py: 'Python',
-      rb: 'Ruby',
-      go: 'Go',
-      java: 'Java',
-      php: 'PHP',
-      cs: 'C#',
-      cpp: 'C++',
-      c: 'C',
-      swift: 'Swift',
-      kt: 'Kotlin',
-      rs: 'Rust',
-      dart: 'Dart',
-      sh: 'Shell',
-      yml: 'YAML',
-      yaml: 'YAML',
-      json: 'JSON',
-      md: 'Markdown',
-      html: 'HTML',
-      css: 'CSS',
-      scss: 'SCSS',
-      sass: 'Sass',
-      less: 'Less',
-      sql: 'SQL',
+    // 如果能识别语言，使用更友好的显示名称
+    if (lang) {
+      return getDisplayLanguage(lang)
     }
 
-    return languageMap[ext] || '未知'
+    return '未知'
   }
 }

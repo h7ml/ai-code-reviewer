@@ -57,7 +57,8 @@
     "cli": "tsx src/cli.ts",
     "test": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" vitest",
     "typecheck": "tsc --noEmit",
-    "prepare": "simple-git-hooks"
+    "prepare": "simple-git-hooks",
+    "review": "tsx src/cli.ts github-pr --owner h7ml --repo ai-code-reviewer --pr-id 1"
   },
   "dependencies": {
     "cac": "^6.7.14",

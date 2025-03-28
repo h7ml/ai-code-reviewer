@@ -115,6 +115,47 @@ cli
   })
 
 /**
+ * 审查GitHub PR上的特定文件并添加评论
+ */
+cli
+  .command('github-file', '审查GitHub PR中的特定文件并提交评论')
+  .option('--owner <owner>', '仓库所有者')
+  .option('--repo <repo>', '仓库名称')
+  .option('--pr-id <id>', '拉取请求ID')
+  .option('--file <file>', '要审查的文件路径')
+  .action(async (options) => {
+    try {
+      if (!options.owner || !options.repo || !options.prId || !options.file) {
+        consola.error('缺少必要参数: --owner, --repo, --pr-id 和 --file 是必需的')
+        process.exit(1)
+      }
+
+      const config = await loadConfig(options.config, {
+        platform: {
+          type: 'github',
+        },
+      })
+
+      consola.info(`审查GitHub PR #${options.prId} 中的文件: ${options.file}`)
+
+      // 创建代码审查器，设置为GitHub平台
+      const reviewer = new CodeReviewer({
+        config,
+        owner: options.owner,
+        repo: options.repo,
+        prId: options.prId,
+      })
+
+      // 获取代码差异
+      await reviewer.reviewSingleFile(options.file)
+    }
+    catch (error) {
+      consola.error('GitHub文件审查失败:', error)
+      process.exit(1)
+    }
+  })
+
+/**
  * 解析命令行参数
  */
 function run(): void {

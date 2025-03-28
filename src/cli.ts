@@ -6,7 +6,7 @@ import { initCli } from './cli/commands'
 process.title = 'ai-review'
 
 // 输出版本信息到调试日志
-// eslint-disable-next-line no-console
+
 console.debug(`AI Code Reviewer v${version}`)
 
 // 执行CLI

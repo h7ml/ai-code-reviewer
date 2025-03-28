@@ -13,6 +13,76 @@
 - 🔔 **通知集成**: 支持通过GitLab评论和企业微信进行通知
 - ⚙️ **灵活配置**: 支持多种AI模型和自定义审查规则，管理配置优先级
 
+## 项目架构
+
+项目采用模块化设计，支持多平台和多AI提供者，核心组件包括：
+
+```mermaid
+graph TD
+    CLI[CLI入口] --> Config[配置管理]
+    CLI --> Platform[平台服务]
+    CLI --> AIProvider[AI提供者]
+    CLI --> Logger[日志系统]
+    CLI --> Core[代码审查核心]
+    
+    Config --> ENV[环境变量]
+    Config --> File[配置文件.aireviewrc.yml]
+    Config --> Args[命令行参数]
+
+    Platform --> GitHub[GitHub]
+    Platform --> GitLab[GitLab]
+    Platform --> Local[本地文件]
+    
+    GitHub --> PRs[拉取请求]
+    GitHub --> Comments[评论]
+    GitHub --> Diffs[差异获取]
+    
+    GitLab --> MRs[合并请求]
+    GitLab --> GLComments[评论]
+    GitLab --> GLDiffs[差异获取]
+
+    AIProvider --> OpenAI[OpenAI]
+    AIProvider --> OpenRouter[OpenRouter]
+    AIProvider --> Ollama[Ollama]
+    
+    OpenAI --> Review[代码审查]
+    OpenAI --> Summary[总结生成]
+    
+    Ollama --> OllamaReview[代码审查]
+    Ollama --> OllamaSummary[总结生成]
+
+    Core --> DiffParser[差异解析]
+    Core --> FileFilter[文件过滤]
+    Core --> Reviewer[审查处理]
+
+    Notification[通知系统] --> WeChat[企业微信]
+    Notification --> PlatformComment[平台评论]
+    Notification --> FileOutput[文件输出]
+
+    CLI --> Notification
+    CLI --> Commands[命令处理]
+
+    Commands --> GithubPR[GitHub PR命令]
+    Commands --> GitLabMR[GitLab MR命令]
+    Commands --> LocalReview[本地审查命令]
+    Commands --> FileReview[单文件审查]
+    
+    PromptMgr[提示词管理] --> SystemPrompt[系统提示]
+    PromptMgr --> ReviewPrompt[审查提示]
+    PromptMgr --> SummaryPrompt[总结提示]
+    
+    Core --> PromptMgr
+```
+
+### 主要模块
+
+- **CLI入口**: 处理命令行输入和执行相应操作
+- **配置管理**: 处理多来源配置的加载和合并
+- **平台服务**: 提供与不同代码托管平台的集成
+- **AI提供者**: 封装不同AI服务的调用逻辑
+- **通知系统**: 提供多渠道通知能力
+- **代码审查核心**: 处理代码差异分析和审查逻辑
+
 ## 安装
 
 ```bash

@@ -96,6 +96,10 @@ function loadEnvConfig(): Partial<AiReviewerConfig> {
       model: process.env.AI_REVIEWER_MODEL || 'deepseek-r1:1.5b',
       apiKey: process.env.AI_REVIEWER_OPENAI_KEY,
       baseUrl: process.env.AI_REVIEWER_BASE_URL,
+      temperature: process.env.AI_REVIEWER_TEMPERATURE ? 
+        parseFloat(process.env.AI_REVIEWER_TEMPERATURE) : undefined,
+      maxTokens: process.env.AI_REVIEWER_MAX_TOKENS ?
+        parseInt(process.env.AI_REVIEWER_MAX_TOKENS) : undefined,
     },
     platform: {
       type: (process.env.AI_REVIEWER_PLATFORM as 'gitlab' | 'github' | 'local') || undefined,
@@ -103,11 +107,28 @@ function loadEnvConfig(): Partial<AiReviewerConfig> {
       url: process.env.AI_REVIEWER_PLATFORM_URL,
     },
     notifications: {
+      gitlab_comment: process.env.AI_REVIEWER_GITLAB_COMMENT ?
+        process.env.AI_REVIEWER_GITLAB_COMMENT === 'true' : undefined,
       wecom: {
         enabled: process.env.AI_REVIEWER_WECOM_ENABLED === 'true',
         webhook: process.env.AI_REVIEWER_WECOM_WEBHOOK,
       },
     },
+    review: {
+      ignoreFiles: process.env.AI_REVIEWER_IGNORE_FILES ?
+        process.env.AI_REVIEWER_IGNORE_FILES.split(',') : undefined,
+      ignorePaths: process.env.AI_REVIEWER_IGNORE_PATHS ?
+        process.env.AI_REVIEWER_IGNORE_PATHS.split(',') : undefined,
+      includePatterns: process.env.AI_REVIEWER_INCLUDE_PATTERNS ?
+        process.env.AI_REVIEWER_INCLUDE_PATTERNS.split(',') : undefined,
+      excludePatterns: process.env.AI_REVIEWER_EXCLUDE_PATTERNS ?
+        process.env.AI_REVIEWER_EXCLUDE_PATTERNS.split(',') : undefined,
+      prompts: {
+        system: process.env.AI_REVIEWER_PROMPT_SYSTEM,
+        review: process.env.AI_REVIEWER_PROMPT_REVIEW,
+        summary: process.env.AI_REVIEWER_PROMPT_SUMMARY,
+      }
+    }
   }
 
   // 清理未定义的值

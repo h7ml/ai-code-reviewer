@@ -16,12 +16,44 @@ export class OpenAIProvider implements AiProvider {
       throw new Error('OpenAI API密钥未提供')
     }
 
+    // 记录传入的配置
+    consola.info(`OpenAI/OpenRouter初始配置: provider=${config.provider}, model=${config.model}, baseUrl=${config.baseUrl || '默认'}`)
+    
     this.config = config
 
-    this.client = new OpenAI({
+    // 检查是否使用OpenRouter
+    const isOpenRouter = config.baseUrl?.includes('openrouter.ai')
+    
+    const clientOptions: any = {
       apiKey: config.apiKey,
       baseURL: config.baseUrl,
-    })
+    }
+    
+    // 为OpenRouter添加必要的请求头
+    if (isOpenRouter) {
+      consola.info('检测到使用OpenRouter API，添加相应配置')
+      clientOptions.defaultHeaders = {
+        'HTTP-Referer': 'https://github.com/h7ml/ai-code-reviewer',
+        'X-Title': 'AI Code Reviewer',
+      }
+      
+      // 确保API路径正确
+      if (!clientOptions.baseURL.endsWith('/api/v1')) {
+        clientOptions.baseURL = `${clientOptions.baseURL.replace(/\/$/, '')}/api/v1`
+        consola.info(`OpenRouter API URL已调整为: ${clientOptions.baseURL}`)
+      }
+      
+      // 移除模型名称格式调整逻辑，由用户完全控制模型格式
+    }
+
+    consola.debug(`OpenAI/OpenRouter客户端初始化配置: ${JSON.stringify({
+      baseURL: clientOptions.baseURL,
+      hasApiKey: !!clientOptions.apiKey,
+      model: clientOptions.model || this.config.model,
+      hasDefaultHeaders: !!clientOptions.defaultHeaders,
+    })}`)
+
+    this.client = new OpenAI(clientOptions)
   }
 
   /**
@@ -41,29 +73,69 @@ export class OpenAIProvider implements AiProvider {
 3. 对每个问题提供改进建议
 4. 提供总结`
 
-      const response = await this.client.chat.completions.create({
-        model: this.config.model,
-        temperature: this.config.temperature || 0.1,
-        max_tokens: this.config.maxTokens,
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      })
+      try {
+        const response = await this.client.chat.completions.create({
+          model: this.config.model,
+          temperature: this.config.temperature || 0.1,
+          max_tokens: this.config.maxTokens || 4000,
+          top_p: 1,
+          frequency_penalty: 0,
+          presence_penalty: 0,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt,
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+        })
 
-      const content = response.choices[0]?.message.content
+        consola.debug(`API响应: ${JSON.stringify({
+          id: response.id,
+          model: response.model,
+          object: response.object,
+          created: response.created,
+          choices_length: response.choices?.length || 0,
+          has_choices: !!response.choices && response.choices.length > 0,
+        }, null, 2)}`)
 
-      if (!content) {
-        throw new Error('OpenAI响应内容为空')
+        if (!response.choices || response.choices.length === 0) {
+          consola.error('API响应中choices数组为空或不存在')
+          throw new Error('API响应返回的choices为空')
+        }
+
+        if (!response.choices[0]) {
+          consola.error('API响应中choices[0]为空')
+          throw new Error('API响应返回的第一个选择为空')
+        }
+
+        if (!response.choices[0].message) {
+          consola.error('API响应中choices[0].message为空')
+          throw new Error('API响应返回的消息对象为空')
+        }
+
+        const content = response.choices[0].message.content
+
+        if (!content) {
+          throw new Error('API响应内容为空')
+        }
+
+        return this.parseReviewResponse(content, diff.newPath)
       }
-
-      return this.parseReviewResponse(content, diff.newPath)
+      catch (error: any) {
+        consola.error(`调用API时出错: ${error.message}`)
+        if (error.response) {
+          consola.error(`API错误响应: ${JSON.stringify({
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+          })}`)
+        }
+        throw error
+      }
     }
     catch (error) {
       consola.error(`OpenAI审查代码时出错:`, error)
@@ -78,7 +150,7 @@ export class OpenAIProvider implements AiProvider {
     try {
       const prompt = this.buildSummaryPrompt(results)
 
-      consola.debug('使用OpenAI生成审查总结')
+      consola.debug('使用API生成审查总结')
 
       const systemPrompt = this.config.review?.prompts?.system || `你是一个专业的代码审查助手，擅长总结代码审查结果并提供改进建议。
 请按照以下格式提供完整的审查报告:
@@ -87,32 +159,72 @@ export class OpenAIProvider implements AiProvider {
 3. 通用改进建议 - 适用于整个代码库的改进建议
 4. 优先修复项 - 需要优先处理的问题`
 
-      const response = await this.client.chat.completions.create({
-        model: this.config.model,
-        temperature: this.config.temperature || 0.1,
-        max_tokens: this.config.maxTokens,
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      })
+      try {
+        const response = await this.client.chat.completions.create({
+          model: this.config.model,
+          temperature: this.config.temperature || 0.1,
+          max_tokens: this.config.maxTokens || 4000,
+          top_p: 1,
+          frequency_penalty: 0,
+          presence_penalty: 0,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt,
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+        })
 
-      const content = response.choices[0]?.message.content
+        consola.debug(`API总结响应: ${JSON.stringify({
+          id: response.id,
+          model: response.model,
+          object: response.object,
+          created: response.created,
+          choices_length: response.choices?.length || 0,
+          has_choices: !!response.choices && response.choices.length > 0,
+        }, null, 2)}`)
 
-      if (!content) {
-        throw new Error('OpenAI响应内容为空')
+        if (!response.choices || response.choices.length === 0) {
+          consola.error('API总结响应中choices数组为空或不存在')
+          throw new Error('API响应返回的choices为空')
+        }
+
+        if (!response.choices[0]) {
+          consola.error('API总结响应中choices[0]为空')
+          throw new Error('API响应返回的第一个选择为空')
+        }
+
+        if (!response.choices[0].message) {
+          consola.error('API总结响应中choices[0].message为空')
+          throw new Error('API响应返回的消息对象为空')
+        }
+
+        const content = response.choices[0].message.content
+
+        if (!content) {
+          throw new Error('API响应内容为空')
+        }
+
+        return content
       }
-
-      return content
+      catch (error: any) {
+        consola.error(`调用API生成总结时出错: ${error.message}`)
+        if (error.response) {
+          consola.error(`API错误响应: ${JSON.stringify({
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+          })}`)
+        }
+        throw error
+      }
     }
     catch (error) {
-      consola.error(`OpenAI生成总结时出错:`, error)
+      consola.error(`生成总结时出错:`, error)
       throw error
     }
   }

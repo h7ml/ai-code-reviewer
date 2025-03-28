@@ -27,6 +27,9 @@ export default antfu(
 
       // 允许缺少函数返回类型
       'ts/explicit-function-return-type': 'warn',
+
+      // 允许console
+      'no-console': 'off',
     },
     ignores: [
       // 忽略YAML文件

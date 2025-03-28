@@ -117,7 +117,7 @@ export class CodeReviewer {
           if (filteredDiffs.length === 1) {
             // 使用格式化工具输出单个文件的详细结果
             const formattedResult = OutputFormatter.formatSingleFileReview(reviewResult)
-            // eslint-disable-next-line no-console
+
             console.log(formattedResult)
           }
           else {
@@ -243,7 +243,7 @@ export class CodeReviewer {
 
       // 查找目标文件的差异
       const targetDiff = diffs.find(diff => diff.newPath === targetFile)
-      
+
       if (!targetDiff) {
         consola.warn(`未找到目标文件 ${targetFile} 的差异`)
         return null
@@ -253,7 +253,7 @@ export class CodeReviewer {
 
       // 调用AI进行代码审查
       const reviewResult = await this.aiProvider.reviewCode(targetDiff)
-      
+
       if (!reviewResult) {
         consola.warn('审查结果为空')
         return null
@@ -261,7 +261,7 @@ export class CodeReviewer {
 
       // 将结果格式化输出
       const formattedResult = OutputFormatter.formatSingleFileReview(reviewResult)
-      // eslint-disable-next-line no-console
+
       console.log(formattedResult)
 
       // 对每个问题提交评论

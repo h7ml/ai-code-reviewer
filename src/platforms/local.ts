@@ -162,6 +162,7 @@ export class LocalPlatform implements Platform {
             const rootFilePath = resolve(rootPath, filePath)
             return await readFile(rootFilePath, 'utf-8')
           }
+          // eslint-disable-next-line unused-imports/no-unused-vars
           catch (innerError) {
             // 如果仍然找不到，抛出原始错误
             throw error

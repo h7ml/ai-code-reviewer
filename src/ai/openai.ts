@@ -18,17 +18,17 @@ export class OpenAIProvider implements AiProvider {
 
     // 记录传入的配置
     consola.info(`OpenAI/OpenRouter初始配置: provider=${config.provider}, model=${config.model}, baseUrl=${config.baseUrl || '默认'}`)
-    
+
     this.config = config
 
     // 检查是否使用OpenRouter
     const isOpenRouter = config.baseUrl?.includes('openrouter.ai')
-    
+
     const clientOptions: any = {
       apiKey: config.apiKey,
       baseURL: config.baseUrl,
     }
-    
+
     // 为OpenRouter添加必要的请求头
     if (isOpenRouter) {
       consola.info('检测到使用OpenRouter API，添加相应配置')
@@ -36,13 +36,13 @@ export class OpenAIProvider implements AiProvider {
         'HTTP-Referer': 'https://github.com/h7ml/ai-code-reviewer',
         'X-Title': 'AI Code Reviewer',
       }
-      
+
       // 确保API路径正确
       if (!clientOptions.baseURL.endsWith('/api/v1')) {
         clientOptions.baseURL = `${clientOptions.baseURL.replace(/\/$/, '')}/api/v1`
         consola.info(`OpenRouter API URL已调整为: ${clientOptions.baseURL}`)
       }
-      
+
       // 移除模型名称格式调整逻辑，由用户完全控制模型格式
     }
 

@@ -93,13 +93,15 @@ function loadEnvConfig(): Partial<AiReviewerConfig> {
   const config: Partial<AiReviewerConfig> = {
     ai: {
       provider: (process.env.AI_REVIEWER_PROVIDER as 'openai' | 'ollama') || undefined,
-      model: process.env.AI_REVIEWER_MODEL || 'deepseek-r1:1.5b',
+      model: process.env.AI_REVIEWER_MODEL || undefined,
       apiKey: process.env.AI_REVIEWER_OPENAI_KEY,
       baseUrl: process.env.AI_REVIEWER_BASE_URL,
-      temperature: process.env.AI_REVIEWER_TEMPERATURE ? 
-        parseFloat(process.env.AI_REVIEWER_TEMPERATURE) : undefined,
-      maxTokens: process.env.AI_REVIEWER_MAX_TOKENS ?
-        parseInt(process.env.AI_REVIEWER_MAX_TOKENS) : undefined,
+      temperature: process.env.AI_REVIEWER_TEMPERATURE
+        ? Number.parseFloat(process.env.AI_REVIEWER_TEMPERATURE)
+        : undefined,
+      maxTokens: process.env.AI_REVIEWER_MAX_TOKENS
+        ? Number.parseInt(process.env.AI_REVIEWER_MAX_TOKENS)
+        : undefined,
     },
     platform: {
       type: (process.env.AI_REVIEWER_PLATFORM as 'gitlab' | 'github' | 'local') || undefined,
@@ -107,28 +109,33 @@ function loadEnvConfig(): Partial<AiReviewerConfig> {
       url: process.env.AI_REVIEWER_PLATFORM_URL,
     },
     notifications: {
-      gitlab_comment: process.env.AI_REVIEWER_GITLAB_COMMENT ?
-        process.env.AI_REVIEWER_GITLAB_COMMENT === 'true' : undefined,
+      gitlab_comment: process.env.AI_REVIEWER_GITLAB_COMMENT
+        ? process.env.AI_REVIEWER_GITLAB_COMMENT === 'true'
+        : undefined,
       wecom: {
         enabled: process.env.AI_REVIEWER_WECOM_ENABLED === 'true',
         webhook: process.env.AI_REVIEWER_WECOM_WEBHOOK,
       },
     },
     review: {
-      ignoreFiles: process.env.AI_REVIEWER_IGNORE_FILES ?
-        process.env.AI_REVIEWER_IGNORE_FILES.split(',') : undefined,
-      ignorePaths: process.env.AI_REVIEWER_IGNORE_PATHS ?
-        process.env.AI_REVIEWER_IGNORE_PATHS.split(',') : undefined,
-      includePatterns: process.env.AI_REVIEWER_INCLUDE_PATTERNS ?
-        process.env.AI_REVIEWER_INCLUDE_PATTERNS.split(',') : undefined,
-      excludePatterns: process.env.AI_REVIEWER_EXCLUDE_PATTERNS ?
-        process.env.AI_REVIEWER_EXCLUDE_PATTERNS.split(',') : undefined,
+      ignoreFiles: process.env.AI_REVIEWER_IGNORE_FILES
+        ? process.env.AI_REVIEWER_IGNORE_FILES.split(',')
+        : undefined,
+      ignorePaths: process.env.AI_REVIEWER_IGNORE_PATHS
+        ? process.env.AI_REVIEWER_IGNORE_PATHS.split(',')
+        : undefined,
+      includePatterns: process.env.AI_REVIEWER_INCLUDE_PATTERNS
+        ? process.env.AI_REVIEWER_INCLUDE_PATTERNS.split(',')
+        : undefined,
+      excludePatterns: process.env.AI_REVIEWER_EXCLUDE_PATTERNS
+        ? process.env.AI_REVIEWER_EXCLUDE_PATTERNS.split(',')
+        : undefined,
       prompts: {
         system: process.env.AI_REVIEWER_PROMPT_SYSTEM,
         review: process.env.AI_REVIEWER_PROMPT_REVIEW,
         summary: process.env.AI_REVIEWER_PROMPT_SUMMARY,
-      }
-    }
+      },
+    },
   }
 
   // 清理未定义的值
@@ -191,9 +198,55 @@ function mergeConfig(
 ): AiReviewerConfig {
   const merged = { ...defaultConfig }
 
-  // 配置优先级: CLI参数 > 环境变量 > 配置文件 > 默认配置
-  const configs = [fileConfig, envConfig, cliConfig]
+  // 首先应用文件配置
+  if (fileConfig.ai) {
+    merged.ai = { ...merged.ai, ...fileConfig.ai }
+  }
+  if (fileConfig.platform) {
+    merged.platform = { ...merged.platform, ...fileConfig.platform }
+  }
+  if (fileConfig.notifications) {
+    merged.notifications = { ...merged.notifications }
+    if (fileConfig.notifications.gitlab_comment !== undefined) {
+      merged.notifications.gitlab_comment = fileConfig.notifications.gitlab_comment
+    }
+    if (fileConfig.notifications.wecom) {
+      merged.notifications.wecom = {
+        ...merged.notifications.wecom,
+        ...fileConfig.notifications.wecom,
+      }
+    }
+  }
+  if (fileConfig.review) {
+    merged.review = { ...merged.review }
+    if (fileConfig.review.ignoreFiles) {
+      merged.review.ignoreFiles = [
+        ...(merged.review.ignoreFiles || []),
+        ...fileConfig.review.ignoreFiles,
+      ]
+    }
+    if (fileConfig.review.ignorePaths) {
+      merged.review.ignorePaths = [
+        ...(merged.review.ignorePaths || []),
+        ...fileConfig.review.ignorePaths,
+      ]
+    }
+    if (fileConfig.review.includePatterns) {
+      merged.review.includePatterns = fileConfig.review.includePatterns
+    }
+    if (fileConfig.review.excludePatterns) {
+      merged.review.excludePatterns = fileConfig.review.excludePatterns
+    }
+    if (fileConfig.review.prompts) {
+      merged.review.prompts = {
+        ...merged.review.prompts,
+        ...fileConfig.review.prompts,
+      }
+    }
+  }
 
+  // 然后应用环境变量和CLI参数（保持原有优先级）
+  const configs = [envConfig, cliConfig]
   for (const config of configs) {
     if (!config)
       continue
@@ -251,7 +304,10 @@ function mergeConfig(
       }
 
       if (config.review.prompts) {
-        merged.review.prompts = config.review.prompts
+        merged.review.prompts = {
+          ...merged.review.prompts,
+          ...config.review.prompts,
+        }
       }
     }
   }
@@ -270,8 +326,19 @@ export async function loadConfig(
   const fileConfig = await loadConfigFile(configPath)
   const envConfig = loadEnvConfig()
 
+  // 打印配置信息以便调试
+  console.log('配置来源:')
+  console.log('- 配置文件:', fileConfig?.ai?.model || '未设置')
+  console.log('- 环境变量:', envConfig?.ai?.model || '未设置')
+  console.log('- 默认配置:', defaultConfig.ai.model)
+
   // 合并所有配置
-  return mergeConfig(defaultConfig, fileConfig, envConfig, cliConfig)
+  const mergedConfig = mergeConfig(defaultConfig, fileConfig, envConfig, cliConfig)
+
+  // 打印最终使用的配置
+  console.log('最终模型配置:', mergedConfig.ai.model)
+
+  return mergedConfig
 }
 
 /**
